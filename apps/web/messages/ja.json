@@ -53,13 +53,49 @@
     "deleteConfirm": "この接続先を削除しますか？暗号化されたキーも削除されます。",
     "schemaSynced": "スキーマを更新しました（{count} テーブル）",
     "grantHint": "テーブルが見えない場合、接続先 DB で GRANT を確認してください",
-    "lastSynced": "最終同期"
+    "lastSynced": "最終同期",
+    "status": "状態",
+    "bootstrap": {
+      "title": "接続先セットアップ",
+      "description": "Target Supabase に SupaAdmin 用の関数を一度だけ作成します。SQL Editor で実行後、「適用済み・再検証」を押してください。",
+      "blockedDescription": "接続先「{name}」はセットアップが未完了のため、ログインと CRUD は利用できません。",
+      "contactAdmin": "プラットフォーム管理者に Target セットアップの完了を依頼してください。",
+      "setupRequired": "セットアップ必要",
+      "ready": "準備完了",
+      "setup": "セットアップ",
+      "verify": "適用済み・再検証",
+      "verified": "セットアップを確認しました",
+      "alreadyReady": "すでにセットアップ済みです",
+      "reloadSql": "SQL を再読込",
+      "securityNote": "exec_sql は SECURITY DEFINER で任意 SQL を実行します。service_role のみが EXECUTE できます。Service Role Key をクライアントやログに露出しないでください。"
+    },
+    "onboarding": {
+      "title": "接続オンボーディング",
+      "description": "「{name}」で CRUD を使う前に、以下のステップを完了してください。",
+      "checklist": "セットアップチェックリスト",
+      "checklistHint": "Dashboard を使わずに Target ログインと権限を動かすには、すべてのステップが必要です。",
+      "stepBootstrap": "Target bootstrap をインストール（exec_sql・permissions helper・GRANT）",
+      "stepSchema": "Target からスキーマを同期",
+      "stepRoles": "ロール権限を設定し RLS を同期",
+      "stepProvision": "ユーザーを招待し Target アカウントを provision",
+      "stepConnect": "Target に接続（ログイン時に JWT permissions を同期）",
+      "syncSchema": "スキーマ同期",
+      "openRoles": "ロールを開く",
+      "openUsers": "ユーザーを開く",
+      "openConnect": "接続をテスト"
+    }
   },
   "connect": {
     "title": "接続先にログイン",
     "description": "接続先 Supabase のユーザー認証情報を入力してください",
+    "email": "メールアドレス",
+    "password": "パスワード",
     "connect": "接続",
-    "connected": "接続済み"
+    "connected": "接続済み",
+    "syncFailed": "Target への権限同期に失敗しました",
+    "provisionRequired": "Target ユーザーが provision されていません。管理者に provision を依頼してください。",
+    "bootstrapRequired": "Target bootstrap が未完了です",
+    "emailMismatch": "provision 済みの Target アカウントとメールが一致しません"
   },
   "table": {
     "noData": "データがありません",
@@ -81,6 +117,8 @@
     "platformAdmin": "プラットフォーム管理者",
     "member": "メンバー",
     "assignRoles": "ロール割当",
+    "memberships": "接続先アクセス",
+    "selectConnection": "接続先を選択",
     "provision": "接続先ユーザー作成",
     "overrides": "個別権限上書き"
   },
@@ -94,6 +132,10 @@
     "canCreate": "作成",
     "canUpdate": "更新",
     "canDelete": "削除"
+  },
+  "rolesPage": {
+    "rlsSyncFailed": "権限は保存しましたが、Target への RLS 同期に失敗しました: {error}",
+    "rlsSyncRetry": "接続先一覧から「RLS を同期」を実行してください"
   },
   "rls": {
     "preview": "RLS SQL プレビュー",

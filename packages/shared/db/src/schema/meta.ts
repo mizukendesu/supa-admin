@@ -27,6 +27,10 @@ export const connections = pgTable("connections", {
   anonKeyEnc: text("anon_key_enc").notNull(),
   serviceRoleEnc: text("service_role_enc").notNull(),
   schemaCachedAt: timestamp("schema_cached_at", { withTimezone: true }),
+  bootstrapStatus: text("bootstrap_status").notNull().default("pending"),
+  bootstrapVerifiedAt: timestamp("bootstrap_verified_at", {
+    withTimezone: true,
+  }),
   createdBy: uuid("created_by"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

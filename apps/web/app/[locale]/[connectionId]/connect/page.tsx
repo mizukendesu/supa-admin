@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { ConnectForm } from "@/components/connect/connect-form";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { redirect } from "@/i18n/routing";
+import { getConnectionBootstrapStatus } from "@/lib/connection-bootstrap";
 import {
   getCurrentProfile,
   getUserConnectionIds,
@@ -23,6 +25,11 @@ export default async function ConnectPage({
 
   const allowedIds = await getUserConnectionIds(profile.id, profile.role);
   if (!allowedIds.includes(connectionId)) notFound();
+
+  const bootstrapStatus = await getConnectionBootstrapStatus(connectionId);
+  if (bootstrapStatus !== "ready") {
+    redirect({ href: `/${connectionId}/setup`, locale });
+  }
 
   const supabase = await createMetaServerClient();
   const connectionSource =

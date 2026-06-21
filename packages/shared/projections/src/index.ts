@@ -25,6 +25,8 @@ export type Profile = {
   updated_at: string;
 };
 
+export type BootstrapStatus = "pending" | "ready";
+
 export type Connection = {
   id: string;
   name: string;
@@ -32,6 +34,8 @@ export type Connection = {
   anon_key_enc: string;
   service_role_enc: string;
   schema_cached_at: string | null;
+  bootstrap_status: BootstrapStatus;
+  bootstrap_verified_at: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

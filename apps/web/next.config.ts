@@ -4,6 +4,9 @@ import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
+/** Monorepo root — shared by file tracing and Turbopack module resolution. */
+const monorepoRoot = path.join(__dirname, "../..");
+
 function buildContentSecurityPolicy(): string {
   const metaUrl = process.env.NEXT_PUBLIC_META_SUPABASE_URL ?? "";
   const extraConnect = process.env.CSP_EXTRA_CONNECT_SRC ?? "";
@@ -59,7 +62,16 @@ const nextConfig: NextConfig = {
     "@supa-admin/ui",
     "@supa-admin/utils",
   ],
-  outputFileTracingRoot: path.join(__dirname, "../.."),
+  outputFileTracingRoot: monorepoRoot,
+  turbopack: {
+    root: monorepoRoot,
+  },
+  experimental: {
+    // 16.2.x dev: server fast refresh can grow heap unbounded in monorepos.
+    turbopackServerFastRefresh: false,
+    // Persist Turbopack cache to disk — lowers cold-start memory on restart.
+    turbopackFileSystemCacheForDev: true,
+  },
   allowedDevOrigins: ["127.0.0.1"],
   async headers() {
     return [

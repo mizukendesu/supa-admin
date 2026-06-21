@@ -71,9 +71,10 @@ describe("generateRlsSql", () => {
     expect(sql).toContain("_insert");
   });
 
-  it("when no permissions, then still includes helper function", () => {
+  it("when no permissions, then omits RLS policies", () => {
     const sql = generateRlsSql([], []);
-    expect(sql).toContain("supaadmin_has_permission");
+    expect(sql).toContain("SupaAdmin RLS Sync");
+    expect(sql).not.toContain("CREATE OR REPLACE FUNCTION");
     expect(sql).not.toContain("ENABLE ROW LEVEL SECURITY");
   });
 });

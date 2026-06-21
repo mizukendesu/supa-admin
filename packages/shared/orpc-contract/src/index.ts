@@ -10,13 +10,22 @@ const columnMeta = z.object({
   is_identity: z.boolean(),
 });
 
+const bootstrapStatus = z.enum(["pending", "ready"]);
+
 const connectionSummary = z.object({
   id: z.string().uuid(),
   name: z.string(),
   url: z.string(),
   schema_cached_at: z.string().nullable(),
+  bootstrap_status: bootstrapStatus,
+  bootstrap_verified_at: z.string().nullable().optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
+});
+
+const rlsSyncResult = z.object({
+  success: z.boolean(),
+  error: z.string().optional(),
 });
 
 const profile = z.object({
@@ -78,6 +87,7 @@ export const connectionsContract = oc.router({
       z.object({
         connection: connectionSummary,
         tableCount: z.number(),
+        setupSql: z.string().optional(),
       }),
     ),
   get: oc
@@ -104,6 +114,65 @@ export const connectionsContract = oc.router({
     .route({ method: "POST", path: "/connections/{id}/schema-sync" })
     .input(z.object({ id: z.string().uuid() }))
     .output(z.object({ success: z.literal(true), tableCount: z.number() })),
+  bootstrap: oc.router({
+    probe: oc
+      .route({ method: "POST", path: "/connections/{id}/bootstrap/probe" })
+      .input(z.object({ id: z.string().uuid() }))
+      .output(
+        z.object({
+          status: bootstrapStatus,
+          setupSql: z.string().optional(),
+        }),
+      ),
+    apply: oc
+      .route({ method: "POST", path: "/connections/{id}/bootstrap/apply" })
+      .input(z.object({ id: z.string().uuid() }))
+      .output(z.object({ success: z.literal(true), status: bootstrapStatus })),
+    verify: oc
+      .route({ method: "POST", path: "/connections/{id}/bootstrap/verify" })
+      .input(z.object({ id: z.string().uuid() }))
+      .output(
+        z.object({
+          success: z.literal(true),
+          status: bootstrapStatus,
+        }),
+      ),
+  }),
+  onboarding: oc.router({
+    status: oc
+      .route({ method: "GET", path: "/connections/{id}/onboarding" })
+      .input(z.object({ id: z.string().uuid() }))
+      .output(
+        z.object({
+          steps: z.object({
+            bootstrap: z.boolean(),
+            schemaSynced: z.boolean(),
+            rolesConfigured: z.boolean(),
+            usersProvisioned: z.boolean(),
+          }),
+          complete: z.boolean(),
+        }),
+      ),
+  }),
+  target: oc.router({
+    syncPermissions: oc
+      .route({
+        method: "POST",
+        path: "/connections/{connectionId}/target/sync-permissions",
+      })
+      .input(
+        z.object({
+          connectionId: z.string().uuid(),
+          targetEmail: z.string().email(),
+        }),
+      )
+      .output(
+        z.object({
+          success: z.literal(true),
+          targetUserId: z.string().uuid(),
+        }),
+      ),
+  }),
 });
 
 export const connectionsRlsContract = oc.router({
@@ -150,7 +219,12 @@ export const rolesContract = oc.router({
         permissions: z.array(tablePermission),
       }),
     )
-    .output(z.object({ success: z.literal(true) })),
+    .output(
+      z.object({
+        success: z.literal(true),
+        rlsSync: rlsSyncResult,
+      }),
+    ),
 });
 
 export const usersContract = oc.router({

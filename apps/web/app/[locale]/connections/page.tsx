@@ -32,7 +32,7 @@ export default async function ConnectionsPage({
   const supabase = await createMetaServerClient();
   const { data: connections } = await supabase
     .from("connections")
-    .select("id, name, url, schema_cached_at")
+    .select("id, name, url, schema_cached_at, bootstrap_status")
     .order("created_at", { ascending: false });
 
   return (

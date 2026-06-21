@@ -53,13 +53,49 @@
     "deleteConfirm": "Delete this connection? Encrypted keys will also be removed.",
     "schemaSynced": "Schema updated ({count} tables)",
     "grantHint": "If tables are missing, check GRANT on the target database",
-    "lastSynced": "Last synced"
+    "lastSynced": "Last synced",
+    "status": "Status",
+    "bootstrap": {
+      "title": "Target setup",
+      "description": "Install SupaAdmin helper functions on the Target Supabase project once. Run the SQL in the SQL Editor, then click Verify.",
+      "blockedDescription": "Connection \"{name}\" is not set up yet. Login and CRUD are unavailable.",
+      "contactAdmin": "Ask a platform administrator to complete Target setup.",
+      "setupRequired": "Setup required",
+      "ready": "Ready",
+      "setup": "Set up",
+      "verify": "Verify setup",
+      "verified": "Target setup verified",
+      "alreadyReady": "Target is already set up",
+      "reloadSql": "Reload SQL",
+      "securityNote": "exec_sql runs arbitrary SQL as SECURITY DEFINER. Only service_role may EXECUTE it. Never expose the Service Role Key in client code or logs."
+    },
+    "onboarding": {
+      "title": "Connection onboarding",
+      "description": "Complete these steps for \"{name}\" before using CRUD.",
+      "checklist": "Setup checklist",
+      "checklistHint": "Finish every step so Target login and permissions work without the Supabase Dashboard.",
+      "stepBootstrap": "Install Target bootstrap (exec_sql, permissions helper, GRANT)",
+      "stepSchema": "Sync schema from Target",
+      "stepRoles": "Configure role permissions and sync RLS",
+      "stepProvision": "Invite users and provision Target accounts",
+      "stepConnect": "Connect to Target (syncs JWT permissions on login)",
+      "syncSchema": "Sync schema",
+      "openRoles": "Open roles",
+      "openUsers": "Open users",
+      "openConnect": "Test connect"
+    }
   },
   "connect": {
     "title": "Connect to target",
     "description": "Enter credentials for the target Supabase project",
+    "email": "Email",
+    "password": "Password",
     "connect": "Connect",
-    "connected": "Connected"
+    "connected": "Connected",
+    "syncFailed": "Failed to sync permissions to Target",
+    "provisionRequired": "Target user not provisioned. Ask a platform admin to provision your account.",
+    "bootstrapRequired": "Target bootstrap is not complete",
+    "emailMismatch": "Email does not match the provisioned Target account"
   },
   "table": {
     "noData": "No data",
@@ -81,6 +117,8 @@
     "platformAdmin": "Platform admin",
     "member": "Member",
     "assignRoles": "Assign roles",
+    "memberships": "Connection access",
+    "selectConnection": "Select connection",
     "provision": "Provision target user",
     "overrides": "Permission overrides"
   },
@@ -94,6 +132,10 @@
     "canCreate": "Create",
     "canUpdate": "Update",
     "canDelete": "Delete"
+  },
+  "rolesPage": {
+    "rlsSyncFailed": "Permissions saved, but RLS sync to Target failed: {error}",
+    "rlsSyncRetry": "Use Sync RLS on the Connections page to retry"
   },
   "rls": {
     "preview": "RLS SQL preview",

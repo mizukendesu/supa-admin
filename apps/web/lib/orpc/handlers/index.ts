@@ -1,6 +1,7 @@
 import "server-only";
 import { ORPCError } from "@orpc/server";
 import {
+  getUserConnectionIds,
   isSetupComplete,
   requirePlatformAdmin,
 } from "@supa-admin/auth/permissions";
@@ -12,13 +13,18 @@ import { encrypt } from "@supa-admin/crypto";
 import {
   buildAppMetadataPermissions,
   executeRlsSync,
+  executeTargetBootstrap,
+  getConnectionOnboardingStatus,
   previewRlsSync,
+  probeConnectionBootstrap,
+  syncTargetUserPermissions,
+  verifyConnectionBootstrap,
 } from "@supa-admin/rls";
 import { fetchSchemaViaRest, syncConnectionSchema } from "@supa-admin/schema";
 import { createTargetAdminClient } from "@supa-admin/supabase-target/admin";
 import { validateTargetUrl } from "@supa-admin/utils";
 import { env } from "@/lib/env";
-import { os, withAdmin } from "../os";
+import { os, withAdmin, withAuth } from "../os";
 import { verifySetupSecret } from "../verify-setup-secret";
 
 export const setupHandlers = os.setup.router({
@@ -82,7 +88,9 @@ export const connectionsHandlers = os.connections.router({
     const supabase = await createMetaServerClient();
     const { data, error } = await supabase
       .from("connections")
-      .select("id, name, url, schema_cached_at, created_at, updated_at")
+      .select(
+        "id, name, url, schema_cached_at, bootstrap_status, bootstrap_verified_at, created_at, updated_at",
+      )
       .order("created_at", { ascending: false });
     if (error)
       throw new ORPCError("INTERNAL_SERVER_ERROR", { message: error.message });
@@ -95,10 +103,8 @@ export const connectionsHandlers = os.connections.router({
       throw new ORPCError("BAD_REQUEST", { message: urlCheck.reason });
     }
 
-    const test = await fetchSchemaViaRest(
-      input.url,
-      encrypt(input.serviceRoleKey),
-    );
+    const serviceRoleEnc = encrypt(input.serviceRoleKey);
+    const test = await fetchSchemaViaRest(input.url, serviceRoleEnc);
     if (test.error && test.tables.length === 0) {
       throw new ORPCError("BAD_REQUEST", { message: test.error });
     }
@@ -112,10 +118,13 @@ export const connectionsHandlers = os.connections.router({
         name: input.name,
         url: input.url.replace(/\/$/, ""),
         anon_key_enc: encrypt(input.anonKey),
-        service_role_enc: encrypt(input.serviceRoleKey),
+        service_role_enc: serviceRoleEnc,
         created_by: profile.id,
+        bootstrap_status: "pending",
       })
-      .select("id, name, url, schema_cached_at")
+      .select(
+        "id, name, url, schema_cached_at, bootstrap_status, bootstrap_verified_at",
+      )
       .single();
 
     if (error)
@@ -135,14 +144,49 @@ export const connectionsHandlers = os.connections.router({
         .eq("id", data.id);
     }
 
-    return { connection: data, tableCount: test.tables.length };
+    const probe = await probeConnectionBootstrap(
+      data.id,
+      data.url,
+      serviceRoleEnc,
+    );
+
+    let connection = data;
+    let setupSql: string | undefined;
+
+    if (probe.ready) {
+      const bootstrap = await executeTargetBootstrap(
+        data.id,
+        data.url,
+        serviceRoleEnc,
+      );
+      if (bootstrap.success) {
+        const { data: updated } = await supabase
+          .from("connections")
+          .select(
+            "id, name, url, schema_cached_at, bootstrap_status, bootstrap_verified_at",
+          )
+          .eq("id", data.id)
+          .single();
+        if (updated) connection = updated;
+      }
+    } else {
+      setupSql = probe.setupSql;
+    }
+
+    return {
+      connection,
+      tableCount: test.tables.length,
+      setupSql,
+    };
   }),
 
   get: os.connections.get.use(withAdmin).handler(async ({ input }) => {
     const supabase = await createMetaServerClient();
     const { data, error } = await supabase
       .from("connections")
-      .select("id, name, url, schema_cached_at, created_at")
+      .select(
+        "id, name, url, schema_cached_at, bootstrap_status, bootstrap_verified_at, created_at",
+      )
       .eq("id", input.id)
       .single();
     if (error) throw new ORPCError("NOT_FOUND", { message: error.message });
@@ -190,6 +234,154 @@ export const connectionsHandlers = os.connections.router({
       }
       return { success: true as const, tableCount: result.tableCount ?? 0 };
     }),
+
+  bootstrap: os.connections.bootstrap.router({
+    probe: os.connections.bootstrap.probe
+      .use(withAdmin)
+      .handler(async ({ input }) => {
+        const supabase = await createMetaServerClient();
+        const { data: connection, error } = await supabase
+          .from("connections")
+          .select("*")
+          .eq("id", input.id)
+          .single();
+        if (error || !connection) {
+          throw new ORPCError("NOT_FOUND", { message: "Connection not found" });
+        }
+
+        const probe = await probeConnectionBootstrap(
+          input.id,
+          connection.url,
+          connection.service_role_enc,
+        );
+
+        if (probe.ready) {
+          await executeTargetBootstrap(
+            input.id,
+            connection.url,
+            connection.service_role_enc,
+          );
+          return { status: "ready" as const };
+        }
+        return { status: "pending" as const, setupSql: probe.setupSql };
+      }),
+
+    apply: os.connections.bootstrap.apply
+      .use(withAdmin)
+      .handler(async ({ input }) => {
+        const supabase = await createMetaServerClient();
+        const { data: connection, error } = await supabase
+          .from("connections")
+          .select("*")
+          .eq("id", input.id)
+          .single();
+        if (error || !connection) {
+          throw new ORPCError("NOT_FOUND", { message: "Connection not found" });
+        }
+
+        const result = await executeTargetBootstrap(
+          input.id,
+          connection.url,
+          connection.service_role_enc,
+        );
+        if (!result.success) {
+          throw new ORPCError("BAD_REQUEST", { message: result.error });
+        }
+        return { success: true as const, status: "ready" as const };
+      }),
+
+    verify: os.connections.bootstrap.verify
+      .use(withAdmin)
+      .handler(async ({ input }) => {
+        const supabase = await createMetaServerClient();
+        const { data: connection, error } = await supabase
+          .from("connections")
+          .select("*")
+          .eq("id", input.id)
+          .single();
+        if (error || !connection) {
+          throw new ORPCError("NOT_FOUND", { message: "Connection not found" });
+        }
+
+        const result = await verifyConnectionBootstrap(
+          input.id,
+          connection.url,
+          connection.service_role_enc,
+        );
+        if (!result.success) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: result.error,
+            data: result.setupSql ? { setupSql: result.setupSql } : undefined,
+          });
+        }
+        return { success: true as const, status: "ready" as const };
+      }),
+  }),
+
+  onboarding: os.connections.onboarding.router({
+    status: os.connections.onboarding.status
+      .use(withAuth)
+      .handler(async ({ input, context }) => {
+        const allowedIds = await getUserConnectionIds(
+          context.profile.id,
+          context.profile.role,
+        );
+        if (!allowedIds.includes(input.id)) {
+          throw new ORPCError("FORBIDDEN", { message: "Forbidden" });
+        }
+        return getConnectionOnboardingStatus(input.id);
+      }),
+  }),
+
+  target: os.connections.target.router({
+    syncPermissions: os.connections.target.syncPermissions
+      .use(withAuth)
+      .handler(async ({ input, context }) => {
+        const allowedIds = await getUserConnectionIds(
+          context.profile.id,
+          context.profile.role,
+        );
+        if (!allowedIds.includes(input.connectionId)) {
+          throw new ORPCError("FORBIDDEN", { message: "Forbidden" });
+        }
+
+        const supabase = await createMetaServerClient();
+        const { data: connection, error } = await supabase
+          .from("connections")
+          .select("*")
+          .eq("id", input.connectionId)
+          .single();
+        if (error || !connection) {
+          throw new ORPCError("NOT_FOUND", { message: "Connection not found" });
+        }
+
+        if (connection.bootstrap_status !== "ready") {
+          throw new ORPCError("PRECONDITION_FAILED", {
+            message: "Target bootstrap is not complete",
+          });
+        }
+
+        const result = await syncTargetUserPermissions({
+          metaUserId: context.profile.id,
+          connectionId: input.connectionId,
+          platformRole: context.profile.role,
+          targetEmail: input.targetEmail,
+          url: connection.url,
+          serviceRoleEnc: connection.service_role_enc,
+        });
+
+        if (!result.success) {
+          throw new ORPCError("PRECONDITION_FAILED", {
+            message: result.message,
+          });
+        }
+
+        return {
+          success: true as const,
+          targetUserId: result.targetUserId,
+        };
+      }),
+  }),
 });
 
 export const connectionsRlsHandlers = os.connectionsRls.router({
@@ -209,6 +401,12 @@ export const connectionsRlsHandlers = os.connectionsRls.router({
       .single();
     if (error || !connection) {
       throw new ORPCError("NOT_FOUND", { message: "Connection not found" });
+    }
+
+    if (connection.bootstrap_status !== "ready") {
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message: "Target bootstrap is not complete",
+      });
     }
 
     const result = await executeRlsSync(
@@ -251,6 +449,8 @@ export const rolesHandlers = os.roles.router({
     .use(withAdmin)
     .handler(async ({ input }) => {
       const supabase = await createMetaServerClient();
+      const profile = await requirePlatformAdmin();
+
       await supabase
         .from("role_permissions")
         .delete()
@@ -269,7 +469,35 @@ export const rolesHandlers = os.roles.router({
           throw new ORPCError("BAD_REQUEST", { message: error.message });
       }
 
-      return { success: true as const };
+      const { data: connection } = await supabase
+        .from("connections")
+        .select("url, service_role_enc, bootstrap_status")
+        .eq("id", input.connectionId)
+        .single();
+
+      if (!connection || connection.bootstrap_status !== "ready") {
+        return {
+          success: true as const,
+          rlsSync: {
+            success: false,
+            error: "Target bootstrap is not complete",
+          },
+        };
+      }
+
+      const rlsResult = await executeRlsSync(
+        input.connectionId,
+        connection.url,
+        connection.service_role_enc,
+        profile.id,
+      );
+
+      return {
+        success: true as const,
+        rlsSync: rlsResult.success
+          ? { success: true }
+          : { success: false, error: rlsResult.error ?? "RLS sync failed" },
+      };
     }),
 });
 
@@ -360,9 +588,22 @@ export const provisionHandlers = os.provision.router({
         throw new ORPCError("NOT_FOUND", { message: "Connection not found" });
       }
 
+      if (connection.bootstrap_status !== "ready") {
+        throw new ORPCError("PRECONDITION_FAILED", {
+          message: "Target bootstrap is not complete",
+        });
+      }
+
+      const { data: targetProfile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", input.userId)
+        .single();
+
       const appMeta = await buildAppMetadataPermissions(
         input.userId,
         input.connectionId,
+        targetProfile?.role ?? "member",
       );
       const targetAdmin = createTargetAdminClient(
         connection.url,

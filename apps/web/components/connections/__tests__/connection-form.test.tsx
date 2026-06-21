@@ -72,6 +72,6 @@ describe("ConnectionForm", () => {
       anonKey: "anon-key",
       serviceRoleKey: "service-key",
     });
-    expect(mockPush).toHaveBeenCalledWith("/connections");
+    expect(mockPush).toHaveBeenCalledWith("/c1/setup");
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Profile } from "@supa-admin/projections";
+import type { Connection, Profile, Role } from "@supa-admin/projections";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -31,14 +31,19 @@ import {
 } from "@/components/ui/table";
 import { orpcBrowser } from "@/lib/orpc/client.browser";
 
+type UserRow = Pick<
+  Profile,
+  "id" | "email" | "display_name" | "role" | "created_at"
+>;
+
 export function UsersManager() {
   const t = useTranslations("users");
   const tAuth = useTranslations("auth");
   const tCommon = useTranslations("common");
-  const [users, setUsers] = useState<
-    Array<
-      Pick<Profile, "id" | "email" | "display_name" | "role" | "created_at">
-    >
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [roles, setRoles] = useState<Pick<Role, "id" | "name">[]>([]);
+  const [connections, setConnections] = useState<
+    Pick<Connection, "id" | "name">[]
   >([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,20 +51,84 @@ export function UsersManager() {
   const [role, setRole] = useState<"platform_admin" | "member">("member");
   const [open, setOpen] = useState(false);
 
+  const [editUser, setEditUser] = useState<UserRow | null>(null);
+  const [editRoleIds, setEditRoleIds] = useState<string[]>([]);
+  const [editConnectionIds, setEditConnectionIds] = useState<string[]>([]);
+  const [provisionConnectionId, setProvisionConnectionId] = useState("");
+  const [provisionEmail, setProvisionEmail] = useState("");
+  const [provisionPassword, setProvisionPassword] = useState("");
+
   useEffect(() => {
-    orpcBrowser.users.list().then((d) => setUsers(d.users ?? []));
+    void loadUsers();
+    orpcBrowser.roles.list().then((d) => setRoles(d.roles ?? []));
+    orpcBrowser.connections
+      .list()
+      .then((d) => setConnections(d.connections ?? []));
   }, []);
+
+  async function loadUsers() {
+    const data = await orpcBrowser.users.list();
+    setUsers(data.users ?? []);
+  }
 
   async function createUser() {
     try {
       await orpcBrowser.users.create({ email, password, displayName, role });
       toast.success(tCommon("success"));
       setOpen(false);
-      const refreshed = await orpcBrowser.users.list();
-      setUsers(refreshed.users ?? []);
+      await loadUsers();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : tCommon("error"));
     }
+  }
+
+  async function openEdit(user: UserRow) {
+    setEditUser(user);
+    setProvisionEmail(user.email);
+    const detail = await orpcBrowser.users.get({ id: user.id });
+    const userRoles = (detail.userRoles ?? []) as Array<{ role_id: string }>;
+    const memberships = (detail.memberships ?? []) as Array<{
+      connection_id: string;
+    }>;
+    setEditRoleIds(userRoles.map((r) => r.role_id));
+    setEditConnectionIds(memberships.map((m) => m.connection_id));
+    setProvisionConnectionId(memberships[0]?.connection_id ?? "");
+  }
+
+  async function saveEdit() {
+    if (!editUser) return;
+    try {
+      await orpcBrowser.users.update({
+        id: editUser.id,
+        roleIds: editRoleIds,
+        connectionIds: editConnectionIds,
+      });
+      toast.success(tCommon("success"));
+      setEditUser(null);
+      await loadUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : tCommon("error"));
+    }
+  }
+
+  async function provisionTargetUser() {
+    if (!editUser || !provisionConnectionId) return;
+    try {
+      await orpcBrowser.provision.createUser({
+        connectionId: provisionConnectionId,
+        userId: editUser.id,
+        email: provisionEmail,
+        password: provisionPassword,
+      });
+      toast.success(tCommon("success"));
+      setProvisionPassword("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : tCommon("error"));
+    }
+  }
+
+  function toggleId(list: string[], id: string): string[] {
+    return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
   }
 
   return (
@@ -119,12 +188,110 @@ export function UsersManager() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={editUser != null}
+        onOpenChange={(next) => !next && setEditUser(null)}
+      >
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editUser?.display_name ?? editUser?.email}
+            </DialogTitle>
+          </DialogHeader>
+          {editUser && (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label>{t("assignRoles")}</Label>
+                <div className="flex flex-wrap gap-2">
+                  {roles.map((r) => (
+                    <Button
+                      key={r.id}
+                      size="sm"
+                      variant={
+                        editRoleIds.includes(r.id) ? "default" : "outline"
+                      }
+                      onClick={() =>
+                        setEditRoleIds((prev) => toggleId(prev, r.id))
+                      }
+                    >
+                      {r.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>{t("memberships")}</Label>
+                <div className="flex flex-wrap gap-2">
+                  {connections.map((c) => (
+                    <Button
+                      key={c.id}
+                      size="sm"
+                      variant={
+                        editConnectionIds.includes(c.id) ? "default" : "outline"
+                      }
+                      onClick={() =>
+                        setEditConnectionIds((prev) => toggleId(prev, c.id))
+                      }
+                    >
+                      {c.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <Button onClick={saveEdit}>{tCommon("save")}</Button>
+
+              <div className="space-y-3 border-t pt-4">
+                <Label>{t("provision")}</Label>
+                <Select
+                  value={provisionConnectionId}
+                  onValueChange={(v) => setProvisionConnectionId(v ?? "")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("selectConnection")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {connections.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="email"
+                  value={provisionEmail}
+                  onChange={(e) => setProvisionEmail(e.target.value)}
+                  placeholder={tAuth("email")}
+                />
+                <Input
+                  type="password"
+                  value={provisionPassword}
+                  onChange={(e) => setProvisionPassword(e.target.value)}
+                  placeholder={tAuth("password")}
+                  minLength={8}
+                />
+                <Button
+                  variant="secondary"
+                  onClick={provisionTargetUser}
+                  disabled={
+                    !provisionConnectionId || provisionPassword.length < 8
+                  }
+                >
+                  {t("provision")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>{t("displayName")}</TableHead>
             <TableHead>{tAuth("email")}</TableHead>
             <TableHead>{t("role")}</TableHead>
+            <TableHead>{tCommon("actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -136,6 +303,15 @@ export function UsersManager() {
                 {user.role === "platform_admin"
                   ? t("platformAdmin")
                   : t("member")}
+              </TableCell>
+              <TableCell>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openEdit(user)}
+                >
+                  {tCommon("edit")}
+                </Button>
               </TableCell>
             </TableRow>
           ))}

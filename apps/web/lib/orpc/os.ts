@@ -5,7 +5,31 @@ export type OrpcContext = {
   actorId: string | null;
 };
 
+export type AuthenticatedContext = OrpcContext & {
+  profile: NonNullable<
+    Awaited<
+      ReturnType<
+        typeof import("@supa-admin/auth/permissions").getCurrentProfile
+      >
+    >
+  >;
+};
+
 export const os = implement(contract).$context<OrpcContext>();
+
+export const withAuth = os.middleware(async ({ context, next }) => {
+  if (context.actorId === null) {
+    throw new ORPCError("UNAUTHORIZED", { message: "Unauthorized" });
+  }
+  const { getCurrentProfile } = await import("@supa-admin/auth/permissions");
+  const profile = await getCurrentProfile();
+  if (!profile) {
+    throw new ORPCError("UNAUTHORIZED", { message: "Unauthorized" });
+  }
+  return next({
+    context: { ...context, profile } satisfies AuthenticatedContext,
+  });
+});
 
 export const withAdmin = os.middleware(async ({ context, next }) => {
   if (context.actorId === null) {

@@ -36,6 +36,30 @@ function invokeWithAdmin(
   );
 }
 
+function invokeWithAuth(
+  context: OrpcContext,
+  next = vi.fn(async () => ({
+    output: undefined,
+    context: {},
+  })),
+) {
+  return import("../os.js").then(({ withAuth }) =>
+    withAuth(
+      {
+        context,
+        next: next as never,
+        path: [],
+        procedure: {} as never,
+        signal: new AbortController().signal,
+        lastEventId: undefined,
+        errors: {} as never,
+      },
+      undefined,
+      middlewareOutputFn,
+    ),
+  );
+}
+
 describe("withAdmin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -78,6 +102,33 @@ describe("withAdmin", () => {
     mockGetCurrentProfile.mockResolvedValue(null);
     await expect(invokeWithAdmin({ actorId: "u1" })).rejects.toMatchObject({
       code: "FORBIDDEN",
+    });
+  });
+});
+
+describe("withAuth", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("when actorId is null, then throws UNAUTHORIZED", async () => {
+    await expect(invokeWithAuth({ actorId: null })).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it("when profile exists, then calls next with profile", async () => {
+    const profile = { id: "user-1", role: "member" as const };
+    mockGetCurrentProfile.mockResolvedValue(profile);
+    const next = vi.fn(
+      async ({ context }: { context: Record<string, unknown> }) => ({
+        output: undefined,
+        context,
+      }),
+    );
+    await invokeWithAuth({ actorId: "user-1" }, next);
+    expect(next).toHaveBeenCalledWith({
+      context: expect.objectContaining({ profile }),
     });
   });
 });

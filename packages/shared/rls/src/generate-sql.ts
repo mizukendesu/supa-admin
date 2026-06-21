@@ -9,19 +9,7 @@ export function generateRlsSql(
   const roleMap = new Map(roles.map((r) => [r.id, r.name]));
   const lines: string[] = [
     "-- SupaAdmin RLS Sync",
-    "-- Helper function to read permissions from JWT app_metadata",
-    `CREATE OR REPLACE FUNCTION public.supaadmin_has_permission(
-  p_table text,
-  p_action text
-) RETURNS boolean AS $$
-DECLARE
-  perms jsonb;
-BEGIN
-  perms := (auth.jwt() -> 'app_metadata' -> 'permissions');
-  IF perms IS NULL THEN RETURN false; END IF;
-  RETURN COALESCE((perms -> p_table ->> p_action)::boolean, false);
-END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public;`,
+    "-- Requires supaadmin_has_permission (installed via Target bootstrap)",
     "",
   ];
 

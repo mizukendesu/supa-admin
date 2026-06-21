@@ -38,7 +38,10 @@ export function ConnectionForm() {
       });
       setLoading(false);
       toast.success(t("schemaSynced", { count: data.tableCount ?? 0 }));
-      router.push("/connections");
+      if (data.setupSql) {
+        toast.warning(t("bootstrap.setupRequired"));
+      }
+      router.push(`/${data.connection.id}/setup`);
       router.refresh();
     } catch (err) {
       setLoading(false);

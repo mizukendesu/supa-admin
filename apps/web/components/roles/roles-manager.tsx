@@ -31,6 +31,7 @@ type ConnectionTable = {
 
 export function RolesManager() {
   const t = useTranslations("roles");
+  const tRolesPage = useTranslations("rolesPage");
   const tCommon = useTranslations("common");
   const [roles, setRoles] = useState<
     Array<Pick<Role, "id" | "name"> & Partial<Role>>
@@ -90,7 +91,7 @@ export function RolesManager() {
 
   async function savePermissions() {
     try {
-      await orpcBrowser.roles.updatePermissions({
+      const data = await orpcBrowser.roles.updatePermissions({
         roleId: selectedRole,
         connectionId: selectedConnection,
         permissions: Object.entries(permissions).map(([table_name, p]) => ({
@@ -98,7 +99,15 @@ export function RolesManager() {
           ...p,
         })),
       });
-      toast.success(tCommon("success"));
+      if (data.rlsSync.success) {
+        toast.success(tCommon("success"));
+      } else {
+        toast.warning(
+          tRolesPage("rlsSyncFailed", {
+            error: data.rlsSync.error ?? tCommon("error"),
+          }),
+        );
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : tCommon("error"));
     }

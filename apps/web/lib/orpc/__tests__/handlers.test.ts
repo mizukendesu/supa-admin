@@ -21,6 +21,11 @@ vi.mock("@supa-admin/rls", () => ({
   }),
   executeRlsSync: vi.fn(),
   buildAppMetadataPermissions: vi.fn(),
+  probeConnectionBootstrap: vi.fn().mockResolvedValue({ ready: true }),
+  executeTargetBootstrap: vi.fn().mockResolvedValue({ success: true }),
+  verifyConnectionBootstrap: vi
+    .fn()
+    .mockResolvedValue({ success: true, status: "ready" }),
 }));
 
 vi.mock("@supa-admin/schema", () => ({
@@ -94,6 +99,7 @@ describe("connectionsHandlers", () => {
             name: "Conn",
             url: "https://x.co",
             schema_cached_at: null,
+            bootstrap_status: "ready",
           },
         ],
         error: null,
@@ -110,6 +116,7 @@ describe("connectionsHandlers", () => {
           name: "Conn",
           url: "https://x.co",
           schema_cached_at: null,
+          bootstrap_status: "ready",
         },
       ],
     });

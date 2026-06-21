@@ -1,6 +1,6 @@
 "use client";
 
-import type { Connection } from "@supa-admin/projections";
+import type { BootstrapStatus } from "@supa-admin/projections";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,15 +33,25 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { orpcBrowser } from "@/lib/orpc/client.browser";
+import { TargetSetupDialog } from "./target-setup-dialog";
+
+type ConnectionRow = {
+  id: string;
+  name: string;
+  url: string;
+  schema_cached_at: string | null;
+  bootstrap_status: BootstrapStatus;
+};
 
 type ConnectionListProps = {
-  connections: Pick<Connection, "id" | "name" | "url" | "schema_cached_at">[];
+  connections: ConnectionRow[];
 };
 
 export function ConnectionList({ connections }: ConnectionListProps) {
   const t = useTranslations();
   const [rlsSql, setRlsSql] = useState("");
   const [rlsOpen, setRlsOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   async function syncSchema(id: string) {
@@ -83,6 +94,11 @@ export function ConnectionList({ connections }: ConnectionListProps) {
     }
   }
 
+  function openSetup(id: string) {
+    setActiveId(id);
+    setSetupOpen(true);
+  }
+
   return (
     <>
       <Table>
@@ -90,6 +106,7 @@ export function ConnectionList({ connections }: ConnectionListProps) {
           <TableRow>
             <TableHead>{t("connections.name")}</TableHead>
             <TableHead>{t("connections.url")}</TableHead>
+            <TableHead>{t("connections.status")}</TableHead>
             <TableHead>{t("connections.lastSynced")}</TableHead>
             <TableHead>{t("common.actions")}</TableHead>
           </TableRow>
@@ -100,11 +117,31 @@ export function ConnectionList({ connections }: ConnectionListProps) {
               <TableCell>{conn.name}</TableCell>
               <TableCell className="font-mono text-xs">{conn.url}</TableCell>
               <TableCell>
+                {conn.bootstrap_status === "pending" ? (
+                  <Badge variant="destructive">
+                    {t("connections.bootstrap.setupRequired")}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">
+                    {t("connections.bootstrap.ready")}
+                  </Badge>
+                )}
+              </TableCell>
+              <TableCell>
                 {conn.schema_cached_at
                   ? new Date(conn.schema_cached_at).toLocaleString()
                   : "-"}
               </TableCell>
               <TableCell className="space-x-2">
+                {conn.bootstrap_status === "pending" && (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => openSetup(conn.id)}
+                  >
+                    {t("connections.bootstrap.setup")}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -116,6 +153,7 @@ export function ConnectionList({ connections }: ConnectionListProps) {
                   size="sm"
                   variant="outline"
                   onClick={() => previewRls(conn.id)}
+                  disabled={conn.bootstrap_status !== "ready"}
                 >
                   {t("connections.syncRls")}
                 </Button>
@@ -149,6 +187,14 @@ export function ConnectionList({ connections }: ConnectionListProps) {
           ))}
         </TableBody>
       </Table>
+
+      {activeId && (
+        <TargetSetupDialog
+          connectionId={activeId}
+          open={setupOpen}
+          onOpenChange={setSetupOpen}
+        />
+      )}
 
       <Dialog open={rlsOpen} onOpenChange={setRlsOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">

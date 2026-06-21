@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { DataTableCrud } from "@/components/data-table/data-table-crud";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { redirect } from "@/i18n/routing";
+import { getConnectionBootstrapStatus } from "@/lib/connection-bootstrap";
 import {
   canAccessTable,
   getCurrentProfile,
@@ -25,6 +27,11 @@ export default async function TablePage({
 
   const allowedIds = await getUserConnectionIds(profile.id, profile.role);
   if (!allowedIds.includes(connectionId)) notFound();
+
+  const bootstrapStatus = await getConnectionBootstrapStatus(connectionId);
+  if (bootstrapStatus !== "ready") {
+    redirect({ href: `/${connectionId}/setup`, locale });
+  }
 
   const canRead = await canAccessTable(
     profile.id,

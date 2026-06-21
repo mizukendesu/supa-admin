@@ -22,6 +22,9 @@ export const coverageConfig = {
     "components/roles/**",
     "components/users/**",
     "components/connections/connection-list.tsx",
+    "components/connections/connection-onboarding-wizard.tsx",
+    "components/connections/target-setup-dialog.tsx",
+    "components/connections/target-setup-panel.tsx",
     "components/auth/logout-button.tsx",
 
     // apps/web barrels → logic lives in packages/shared/*
@@ -39,6 +42,7 @@ export const coverageConfig = {
     // oRPC wiring (handlers tested directly; browser client needs jsdom/E2E)
     "lib/orpc/router.ts",
     "lib/orpc/client.browser.ts",
+    "lib/connection-bootstrap.ts",
 
     // Supabase / Next.js client factories (framework glue)
     "**/meta-client.ts",

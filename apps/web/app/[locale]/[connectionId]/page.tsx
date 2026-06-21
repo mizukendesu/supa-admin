@@ -1,5 +1,7 @@
+import { getConnectionOnboardingStatus } from "@supa-admin/rls";
 import { notFound } from "next/navigation";
 import { redirect } from "@/i18n/routing";
+import { getConnectionBootstrapStatus } from "@/lib/connection-bootstrap";
 import {
   getCurrentProfile,
   getUserConnectionIds,
@@ -17,6 +19,18 @@ export default async function ConnectionIndexPage({
 
   const allowedIds = await getUserConnectionIds(profile.id, profile.role);
   if (!allowedIds.includes(connectionId)) notFound();
+
+  const bootstrapStatus = await getConnectionBootstrapStatus(connectionId);
+  if (bootstrapStatus !== "ready") {
+    redirect({ href: `/${connectionId}/setup`, locale });
+  }
+
+  if (profile.role === "platform_admin") {
+    const onboarding = await getConnectionOnboardingStatus(connectionId);
+    if (!onboarding.complete) {
+      redirect({ href: `/${connectionId}/setup`, locale });
+    }
+  }
 
   const permissions = await resolveUserPermissions(
     profile.id,

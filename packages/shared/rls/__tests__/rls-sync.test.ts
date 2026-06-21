@@ -9,6 +9,14 @@ vi.mock("@supa-admin/auth/server", () => ({
   createMetaServerClient: vi.fn(async () => ({
     from: mockFrom,
   })),
+  createMetaServiceClient: vi.fn(() => ({
+    from: vi.fn().mockReturnValue(
+      mockSupabaseQuery({
+        data: { bootstrap_status: "ready" },
+        error: null,
+      }),
+    ),
+  })),
 }));
 
 vi.mock("@supa-admin/supabase-target/admin", () => ({
@@ -72,6 +80,23 @@ describe("executeRlsSync", () => {
       "user-1",
     );
     expect(result.success).toBe(true);
+  });
+
+  it("when bootstrap pending, then rejects before rpc", async () => {
+    const { createMetaServiceClient } = await import("@supa-admin/auth/server");
+    vi.mocked(createMetaServiceClient).mockReturnValueOnce({
+      from: vi.fn().mockReturnValue(
+        mockSupabaseQuery({
+          data: { bootstrap_status: "pending" },
+          error: null,
+        }),
+      ),
+    } as never);
+
+    const { executeRlsSync } = await import("../src/index.js");
+    await expect(
+      executeRlsSync("c1", "https://example.supabase.co", "enc", "user-1"),
+    ).rejects.toThrow("Target bootstrap is not complete");
   });
 });
 
