@@ -15,6 +15,13 @@
       "when": 1782007597077,
       "tag": "0001_eager_random",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782019237048,
+      "tag": "0002_cold_maginty",
+      "breakpoints": true
     }
   ]
 }
