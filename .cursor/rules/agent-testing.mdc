@@ -1,0 +1,58 @@
+<!-- AUTO-GENERATED from .ai-context/ — do not edit -->
+
+---
+---
+
+# Agent Testing Guide
+
+How to write and run tests in this repo when acting as an AI agent.
+
+## Quick run
+
+```bash
+pnpm db:start:meta
+pnpm test:turbo
+# or with coverage:
+pnpm test:coverage
+```
+
+`pnpm test` wraps `test-with-supabase.ts` and starts Meta if needed.
+
+## Database tests (Drizzle)
+
+Import from `@supa-admin/vitest-config/setup`:
+
+```typescript
+import { withRollbackTx } from "@supa-admin/vitest-config/setup";
+
+await withRollbackTx(async (tx) => {
+  // test body — always rolls back
+});
+```
+
+Requires Meta Postgres on **54322**. Defaults are set in `tooling/vitest/setup.ts`.
+
+## oRPC handler tests
+
+Use helpers from `apps/web/lib/orpc/__tests__/helpers.ts`:
+
+```typescript
+import { adminCallContext, callWithInput, callWithoutInput, TEST_IDS } from "./helpers";
+
+const ctx = adminCallContext();
+await callWithInput(procedure, { ...input }, { context: ctx });
+await callWithoutInput(procedure, { context: ctx });
+```
+
+Mock Supabase with `mockSupabaseQuery` from `@supa-admin/vitest-config/supabase-mock`.
+
+## UI tests
+
+Critical forms use `@vitest-environment jsdom` in `apps/web/components/**/__tests__/`.
+
+## What not to test
+
+Coverage excludes thin barrels, shadcn `components/ui/**`, page wrappers, and test support code. Focus on auth, connections, handlers, and permission logic.
+
+See [docs/testing.md](../../docs/testing.md) for exclusions and CI env vars.
+

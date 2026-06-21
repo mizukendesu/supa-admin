@@ -1,5 +1,8 @@
 pre-commit:
   commands:
+    generate-ai-context:
+      glob: "{.ai-context/**,AGENTS.md,CLAUDE.md,.cursor/**,.claude/**,.agents/**}"
+      run: pnpm ai-context:generate && git add AGENTS.md CLAUDE.md .cursor .claude .agents
     generate-openapi-spec:
       glob: "packages/shared/orpc-contract/src/**/*.ts"
       run: pnpm --filter @supa-admin/orpc-contract generate:openapi && git add packages/shared/orpc-contract/spec.json

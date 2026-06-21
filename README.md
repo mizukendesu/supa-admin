@@ -183,6 +183,7 @@ docker compose up --build
 - [Architecture](docs/architecture.md)
 - [Coding standards](docs/coding-standards.md)
 - [Testing](docs/testing.md)
+- [AI agents guide](docs/ai-agents.md) — `.ai-context/` SSOT, skills, MCP
 - [Changelog](CHANGELOG.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [日本語概要](docs/ja/README.md)

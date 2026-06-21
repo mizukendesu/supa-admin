@@ -1,0 +1,43 @@
+# Local Development
+
+## Prerequisites
+
+Docker Desktop, Supabase CLI, Node 22.18+, pnpm 9.15+
+
+## Bootstrap
+
+```bash
+corepack enable
+pnpm install
+pnpm db:start          # Meta (5432x) + Target (5442x)
+pnpm setup:local       # env + reset + seed local Target connection
+pnpm dev               # http://127.0.0.1:3000
+```
+
+## Port map
+
+| Stack | Studio | API | DB |
+|-------|--------|-----|-----|
+| Meta (`supabase/`) | http://127.0.0.1:54323 | 54321 | 54322 |
+| Target (`supabase-target/`) | http://127.0.0.1:54423 | 54421 | 54422 |
+
+## Two-stage authentication
+
+1. **Meta login** — Supabase Auth on the Meta project (platform users).
+2. **Target session** — per-connection browser Supabase client for end-user auth on Target projects.
+
+## Environment
+
+Copy `.env.example` → `apps/web/.env.local` or run `pnpm setup:env-local` after `pnpm db:start`.
+
+Key variables: `NEXT_PUBLIC_META_SUPABASE_URL`, `META_SUPABASE_SERVICE_ROLE_KEY`, `ENCRYPTION_KEY`, `DATABASE_URL`.
+
+## Common commands
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start Next.js dev server |
+| `pnpm db:start:meta` | Meta Supabase only |
+| `pnpm db:reset` | Reset Meta DB |
+| `pnpm db:reset:target` | Reset Target DB |
+| `pnpm lint` / `pnpm typecheck` | Pre-PR checks |

@@ -61,7 +61,28 @@ If you fork the repo, the `migrate-db` workflow is optional. Configure `DATABASE
 
 ## Documentation
 
-Contributor docs live in static `docs/` — edit them directly. There is no code generation step.
+### Human-readable docs
+
+Contributor docs live in `docs/` — edit them directly for architecture details, testing guides, and OSS onboarding.
+
+### AI agent context
+
+Agent-facing rules, workflows, and skills use **`.ai-context/`** as the single source of truth. Generated files (`AGENTS.md`, `CLAUDE.md`, `.cursor/`, `.claude/`, `.agents/`) must not be edited by hand.
+
+After changing `.ai-context/**`:
+
+```bash
+pnpm ai-context:generate
+```
+
+Commit both the SSOT changes and regenerated outputs. See [docs/ai-agents.md](docs/ai-agents.md) for the full guide.
+
+| Location | Purpose |
+|----------|---------|
+| `.ai-context/rules/` | Agent rules (concise, with frontmatter) |
+| `.ai-context/workflows/` | Runbooks (local dev, PR, testing) |
+| `.ai-context/skills/` | Project-specific agent skills |
+| `docs/` | Human-readable detailed docs |
 
 ## Questions
 

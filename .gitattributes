@@ -1,1 +1,6 @@
 packages/shared/orpc-contract/spec.json linguist-generated=true -diff
+AGENTS.md linguist-generated=true -diff
+CLAUDE.md linguist-generated=true -diff
+.cursor/** linguist-generated=true -diff
+.claude/** linguist-generated=true -diff
+.agents/** linguist-generated=true -diff

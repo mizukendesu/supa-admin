@@ -1,0 +1,46 @@
+name: AI Context Check
+
+on:
+  pull_request:
+    paths:
+      - ".ai-context/**"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - ".cursor/**"
+      - ".claude/**"
+      - ".agents/**"
+      - ".github/workflows/ai-context-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".ai-context/**"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - ".cursor/**"
+      - ".claude/**"
+      - ".agents/**"
+
+jobs:
+  ai-context-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm ai-context:generate
+      - name: Verify generated files are up to date
+        run: |
+          git diff --exit-code AGENTS.md CLAUDE.md .cursor .claude .agents || (
+            echo ""
+            echo "❌ AI context generated files are out of date."
+            echo "   Run: pnpm ai-context:generate"
+            echo ""
+            git diff --stat AGENTS.md CLAUDE.md .cursor .claude .agents
+            exit 1
+          )

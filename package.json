@@ -25,7 +25,8 @@
     "setup:env": "tsx scripts/setup-env.ts",
     "setup:env-local": "tsx scripts/setup-env-local.ts",
     "setup:local": "tsx scripts/setup-local.ts",
-    "db:push": "pnpm --filter @supa-admin/db db:push"
+    "db:push": "pnpm --filter @supa-admin/db db:push",
+    "ai-context:generate": "tsx .ai-context/scripts/index.ts"
   },
   "pnpm": {
     "peerDependencyRules": {
