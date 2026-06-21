@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@supa-admin/crypto": "workspace:*",
+    "@supa-admin/feature-access": "workspace:*",
+    "@supa-admin/feature-setup": "workspace:*",
     "@supa-admin/projections": "workspace:*",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",

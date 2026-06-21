@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- DDD layering: `packages/features/*`, `packages/workflows`, `packages/shared/{ddd,errors,repository-kit}`
+- Architecture harness: `pnpm lint:arch`, `pnpm architecture-check`, Constitution in docs
+- CI schema sync webhook (`POST /api/webhooks/schema-sync`) with per-connection HMAC secrets
+- User permission overrides UI and `access.*` oRPC procedures
+- TanStack Query data layer for admin mutations (ConnectionList refresh)
+- Server loaders (`apps/web/lib/server/loaders/`) replacing ShellExtrasContext
+
+### Changed
+
+- oRPC handlers split into thin adapters delegating to workflows/features
+- Meta business persistence via Drizzle repository-kit (Supabase Auth session only exception)
+- RSC pages use workflows/loaders instead of direct Supabase queries
+
 ## [0.1.0] - 2025-06-20
 
 ### Added

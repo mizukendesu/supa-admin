@@ -7,16 +7,22 @@ Pure functions (crypto, `generateRlsSql`, permission merge, URL validation) are 
 ## Database tests
 
 - Use Meta Supabase local stack on port **54322** (Postgres) and **54321** (API).
-- Wrap Drizzle-based tests in `withRollbackTx` so each test runs in a transaction that rolls back.
+- Wrap Drizzle-based tests in `withRollbackTx` from `@supa-admin/vitest-config/setup`.
+- Repository integration: `packages/shared/repository-kit/__tests__/*integration*.test.ts`.
 - Supabase integration tests seed data via the service role client; CI runs `supabase db reset` before coverage.
 - Run with `pnpm test` (starts Meta if needed), `pnpm test:turbo`, or `pnpm test:coverage`.
+
+## Architecture tests
+
+- `pnpm lint:arch` — dependency-cruiser (package/layer boundaries).
+- `pnpm architecture-check` — grep harness for app/** and components/** patterns.
+- `scripts/__tests__/architecture-check.test.ts` — fixture violations must fail the check.
 
 ## Coverage
 
 - Local: `pnpm test:coverage` (requires Meta Supabase on port **54322**)
-- Generates `lcov.info` under `packages/**/coverage/` and `apps/web/coverage/` via shared Vitest config
-- CI uploads reports to [Codecov](https://codecov.io/gh/mizukendesu/supa-admin) after `pnpm test:coverage`
-- **Excluded from coverage:** `components/ui/**`, `packages/shared/ui/**`, thin page wrappers (`app/**`), i18n/hooks, presentation-heavy components (data-table, dynamic-form, layout, roles/users managers), **re-export barrels** (`apps/web/lib/{crypto,permissions,rls,schema,supabase,types,utils}`), **env bootstrap** (`lib/env.ts`), **oRPC wiring** (`lib/orpc/router.ts`, `lib/orpc/client.browser.ts`), **Supabase/Next client factories** (`auth/meta-*.ts`, `auth/server.ts`), and test support code (`**/__tests__/**`). Critical auth/connection forms and server logic remain in scope.
+- Generates `lcov.info` under `packages/**/coverage/` and `apps/web/coverage/`
+- CI uploads reports to [Codecov](https://codecov.io/gh/mizukendesu/supa-admin)
 - **Project target:** 80% (see `codecov.yml`). Patch coverage on changed lines: 80%.
 
 ### Test file layout
@@ -24,13 +30,16 @@ Pure functions (crypto, `generateRlsSql`, permission merge, URL validation) are 
 | Area | Location |
 |------|----------|
 | Shared packages | `packages/shared/<pkg>/__tests__/**/*.test.ts` |
+| Features | `packages/features/<feature>/__tests__/**/*.test.ts` |
+| Workflows | `packages/workflows/__tests__/**/*.test.ts` |
 | oRPC handlers | `apps/web/lib/orpc/__tests__/**/*.test.ts` |
-| Critical UI | `apps/web/components/**/__tests__/**/*.test.tsx` (use `@vitest-environment jsdom`) |
+| Webhook routes | `apps/web/lib/webhooks/__tests__/**/*.test.ts` (covers `app/api/webhooks` handlers) |
+| Critical UI | `apps/web/components/**/__tests__/**/*.test.tsx` (`@vitest-environment jsdom`) |
 | Middleware | `apps/web/middleware.test.ts` |
 
 ## CI
 
-GitHub Actions runs `supabase db reset` before `pnpm test:coverage` with `TEST_DATABASE_URL` pointing at the local Meta Postgres instance and standard local Supabase API keys. Coverage is uploaded via `codecov/codecov-action` using the `CODECOV_TOKEN` secret.
+GitHub Actions runs `pnpm lint`, `pnpm lint:arch`, `pnpm architecture-check`, then `supabase db reset` before `pnpm test:coverage`.
 
 ## Environment
 

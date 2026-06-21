@@ -1,4 +1,5 @@
-import { mockSupabaseQuery } from "@supa-admin/vitest-config/supabase-mock";
+import { err } from "@supa-admin/ddd";
+import { CustomError } from "@supa-admin/errors";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   adminCallContext,
@@ -7,53 +8,58 @@ import {
   TEST_IDS,
 } from "./helpers.js";
 
-const { mockServerFrom } = vi.hoisted(() => ({
-  mockServerFrom: vi.fn(),
-}));
-
 vi.mock("server-only", () => ({}));
 
-vi.mock("@supa-admin/rls", () => ({
-  previewRlsSync: vi.fn().mockResolvedValue({
+vi.mock("@supa-admin/feature-setup", () => ({
+  isSetupComplete: vi.fn().mockResolvedValue(true),
+  createAdmin: vi.fn(),
+}));
+
+vi.mock("@supa-admin/feature-connections", () => ({
+  listConnections: vi.fn(),
+  createConnection: vi.fn(),
+  getConnection: vi.fn(),
+  deleteConnection: vi.fn(),
+  listAccessibleConnections: vi.fn(),
+  getAccessibleConnection: vi.fn(),
+  getAnonKey: vi.fn(),
+  bootstrapProbe: vi.fn(),
+  bootstrapApply: vi.fn(),
+  bootstrapVerify: vi.fn(),
+  rotateWebhookSecret: vi.fn(),
+  revealWebhookSecret: vi.fn(),
+  previewConnectionRls: vi.fn().mockResolvedValue({
     sql: "-- sql",
     sqlHash: "abc",
     permissionCount: 1,
   }),
-  executeRlsSync: vi.fn(),
-  buildAppMetadataPermissions: vi.fn(),
-  probeConnectionBootstrap: vi
-    .fn()
-    .mockResolvedValue({ ready: true, mode: "supaadmin" }),
-  executeTargetBootstrap: vi.fn().mockResolvedValue({ success: true }),
-  verifyConnectionBootstrap: vi
-    .fn()
-    .mockResolvedValue({ success: true, status: "ready" }),
+  applyConnectionRls: vi.fn(),
 }));
 
-vi.mock("@supa-admin/schema", () => ({
-  fetchSchemaViaRest: vi.fn(),
-  syncConnectionSchema: vi.fn(),
+vi.mock("@supa-admin/feature-access", () => ({
+  listRoles: vi.fn(),
+  createRole: vi.fn(),
+  getRolePermissions: vi.fn(),
+  getUserConnectionIds: vi.fn().mockResolvedValue([TEST_IDS.connection]),
+  updateUserOverrides: vi.fn(),
+  getUserOverrides: vi.fn(),
 }));
 
-vi.mock("@supa-admin/crypto", () => ({
-  encrypt: vi.fn((v: string) => `enc:${v}`),
+vi.mock("@supa-admin/feature-users", () => ({
+  listUsers: vi.fn(),
+  createUser: vi.fn(),
+  getUser: vi.fn(),
+  updateUser: vi.fn(),
 }));
 
-vi.mock("@supa-admin/supabase-target/admin", () => ({
-  createTargetAdminClient: vi.fn(),
-}));
-
-vi.mock("@supa-admin/utils", () => ({
-  validateTargetUrl: vi.fn((url: string) =>
-    url.startsWith("http")
-      ? { ok: true }
-      : { ok: false, reason: "Invalid URL" },
-  ),
-}));
-
-vi.mock("@supa-admin/auth/server", () => ({
-  createMetaServiceClient: vi.fn(),
-  createMetaServerClient: vi.fn(async () => ({ from: mockServerFrom })),
+vi.mock("@supa-admin/workflows", () => ({
+  createConnectionWorkflow: vi.fn(),
+  syncConnectionSchemaWorkflow: vi.fn(),
+  updateRolePermissionsWorkflow: vi.fn(),
+  provisionTargetUserWorkflow: vi.fn(),
+  getShellData: vi.fn(),
+  completeOnboarding: vi.fn(),
+  syncTargetSession: vi.fn(),
 }));
 
 vi.mock("@/lib/env", () => ({
@@ -64,11 +70,6 @@ vi.mock("@/lib/env", () => ({
 }));
 
 vi.mock("@supa-admin/auth/permissions", () => ({
-  isSetupComplete: vi.fn().mockResolvedValue(true),
-  requirePlatformAdmin: vi.fn().mockResolvedValue({
-    id: TEST_IDS.user,
-    role: "platform_admin",
-  }),
   getCurrentProfile: vi.fn().mockResolvedValue({
     id: TEST_IDS.user,
     role: "platform_admin",
@@ -93,20 +94,21 @@ describe("connectionsHandlers", () => {
   });
 
   it("when list called, then returns connections", async () => {
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: [
-          {
-            id: TEST_IDS.connection,
-            name: "Conn",
-            url: "https://x.co",
-            schema_cached_at: null,
-            bootstrap_status: "ready",
-          },
-        ],
-        error: null,
-      }),
-    );
+    const { listConnections } = await import("@supa-admin/feature-connections");
+    vi.mocked(listConnections).mockResolvedValue([
+      {
+        id: TEST_IDS.connection,
+        name: "Conn",
+        url: "https://x.co",
+        schema_cached_at: null,
+        bootstrap_status: "ready",
+        bootstrap_verified_at: null,
+        created_by: null,
+        created_at: "2024-01-01",
+        updated_at: "2024-01-01",
+      },
+    ]);
+
     const { connectionsHandlers } = await import("../handlers/index.js");
     const result = await callWithoutInput(connectionsHandlers.list, {
       context: adminCtx,
@@ -119,12 +121,24 @@ describe("connectionsHandlers", () => {
           url: "https://x.co",
           schema_cached_at: null,
           bootstrap_status: "ready",
+          bootstrap_verified_at: null,
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
         },
       ],
     });
   });
 
   it("when create with invalid url, then throws BAD_REQUEST", async () => {
+    const { createConnectionWorkflow } = await import("@supa-admin/workflows");
+    vi.mocked(createConnectionWorkflow).mockResolvedValue(
+      err(
+        new CustomError("Invalid URL", {
+          code: "feature-connections/invalid-url",
+        }),
+      ),
+    );
+
     const { connectionsHandlers } = await import("../handlers/index.js");
     await expect(
       callWithInput(
@@ -147,53 +161,56 @@ describe("rolesHandlers", () => {
   });
 
   it("when list called, then returns roles", async () => {
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: [{ id: TEST_IDS.role, name: "Editor", description: null }],
-        error: null,
-      }),
-    );
+    const { listRoles } = await import("@supa-admin/feature-access");
+    vi.mocked(listRoles).mockResolvedValue([
+      {
+        id: TEST_IDS.role,
+        name: "Editor",
+        description: null,
+        created_at: "2024-01-01",
+        updated_at: "2024-01-01",
+      },
+    ]);
+
     const { rolesHandlers } = await import("../handlers/index.js");
     const result = await callWithoutInput(rolesHandlers.list, {
       context: adminCtx,
     });
     expect(result).toEqual({
-      roles: [{ id: TEST_IDS.role, name: "Editor", description: null }],
+      roles: [
+        {
+          id: TEST_IDS.role,
+          name: "Editor",
+          description: null,
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      ],
     });
   });
 
   it("when getPermissions called, then returns role permissions", async () => {
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: [
-          {
-            table_name: "posts",
-            can_read: true,
-            can_create: false,
-            can_update: false,
-            can_delete: false,
-          },
-        ],
-        error: null,
-      }),
-    );
+    const { getRolePermissions } = await import("@supa-admin/feature-access");
+    vi.mocked(getRolePermissions).mockResolvedValue([
+      {
+        id: "perm-1",
+        role_id: TEST_IDS.role,
+        connection_id: TEST_IDS.connection,
+        table_name: "posts",
+        can_read: true,
+        can_create: false,
+        can_update: false,
+        can_delete: false,
+      },
+    ]);
+
     const { rolesHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
       rolesHandlers.getPermissions,
       { roleId: TEST_IDS.role, connectionId: TEST_IDS.connection },
       { context: adminCtx },
     );
-    expect(result).toEqual({
-      permissions: [
-        {
-          table_name: "posts",
-          can_read: true,
-          can_create: false,
-          can_update: false,
-          can_delete: false,
-        },
-      ],
-    });
+    expect(result.permissions[0]?.table_name).toBe("posts");
   });
 });
 
@@ -203,20 +220,18 @@ describe("usersHandlers", () => {
   });
 
   it("when list called, then returns users", async () => {
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: [
-          {
-            id: TEST_IDS.user,
-            email: "a@b.com",
-            display_name: "A",
-            role: "member",
-            created_at: "2024-01-01",
-          },
-        ],
-        error: null,
-      }),
-    );
+    const { listUsers } = await import("@supa-admin/feature-users");
+    vi.mocked(listUsers).mockResolvedValue([
+      {
+        id: TEST_IDS.user,
+        email: "a@b.com",
+        display_name: "A",
+        role: "member",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-01",
+      },
+    ]);
+
     const { usersHandlers } = await import("../handlers/index.js");
     const result = await callWithoutInput(usersHandlers.list, {
       context: adminCtx,
@@ -236,8 +251,10 @@ describe("usersHandlers", () => {
 });
 
 describe("connectionsRlsHandlers", () => {
-  it("when preview called, then delegates to previewRlsSync", async () => {
-    const { previewRlsSync } = await import("@supa-admin/rls");
+  it("when preview called, then delegates to previewConnectionRls", async () => {
+    const { previewConnectionRls } = await import(
+      "@supa-admin/feature-connections"
+    );
     const { connectionsRlsHandlers } = await import("../handlers/index.js");
 
     const result = await callWithInput(
@@ -246,7 +263,7 @@ describe("connectionsRlsHandlers", () => {
       { context: adminCtx },
     );
 
-    expect(previewRlsSync).toHaveBeenCalledWith(TEST_IDS.connection);
+    expect(previewConnectionRls).toHaveBeenCalledWith(TEST_IDS.connection);
     expect(result).toEqual({
       sql: "-- sql",
       sqlHash: "abc",

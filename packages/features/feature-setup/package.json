@@ -1,0 +1,26 @@
+{
+  "name": "@supa-admin/feature-setup",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "files": ["src/index.ts", "src/application/**", "src/domain/**", "src/infrastructure/**"],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@supa-admin/ddd": "workspace:*",
+    "@supa-admin/errors": "workspace:*",
+    "@supa-admin/repository-kit": "workspace:*",
+    "@supabase/supabase-js": "^2.108.2",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@supa-admin/tsconfig": "workspace:*",
+    "@supa-admin/vitest-config": "workspace:*",
+    "@types/node": "^20",
+    "typescript": "~5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

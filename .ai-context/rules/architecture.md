@@ -7,7 +7,7 @@ globs: "**/*.{ts,tsx}"
 
 - Turborepo + pnpm monorepo with `@supa-admin/*` scope
 - Meta DB: Drizzle SSOT in `packages/shared/db`, RLS/triggers in SQL migrations
-- API: oRPC only via `apps/web/app/api/rpc` — no REST routes
+- API: oRPC via `apps/web/app/api/rpc` + CI Webhook via `apps/web/app/api/webhooks/*`
 - Auth: Supabase Auth (Meta). Target uses browser client (two-stage login)
 - Local dev: dual Supabase — Meta 5432x, Target 5442x (+100 offset)
 - ES/CQRS: not used
@@ -15,17 +15,49 @@ globs: "**/*.{ts,tsx}"
 ## Layering
 
 ```
-apps/web/app          → UI (oRPC client for meta DB operations)
-apps/web/lib/orpc     → handlers (use cases, auth)
-packages/features/*   → domain repositories (future)
-packages/shared/*     → cross-cutting (crypto, rls, auth, schema)
+apps/web/app              → UI, RSC, thin HTTP adapters (oRPC + webhooks)
+apps/web/lib/orpc         → oRPC handlers (thin — call workflows/features only)
+apps/web/lib/server/loaders → cached RSC data via workflows
+packages/workflows        → multi-domain orchestration
+packages/features/*       → domain + application use cases (single aggregate)
+packages/shared/repository-kit → Drizzle repository implementations
+packages/shared/*         → cross-cutting (crypto, rls, auth, schema, ddd, errors)
 ```
+
+## Architecture Constitution
+
+Breaking these rules requires ADR + harness update:
+
+1. Meta business data persistence uses **Drizzle repository-kit** (no Supabase `.from()` except Auth session)
+2. Target data CRUD stays **browser → Target Supabase → RLS** (not oRPC)
+3. RLS definition SSOT is **Meta**; apply via **Meta workflows only** (not outbound webhooks)
+4. **No cross-import** between feature packages (orchestrate via workflows)
+5. Presentation imports **workflow / feature index only** (no domain deep imports)
+6. Inbound HTTP adapters are **thin** — business logic lives in one workflow/use-case
+7. **oRPC contract first** — add procedures in `packages/shared/orpc-contract` before handlers
+
+## Harness rules (CI enforced)
+
+| ID | Tool | Rule |
+|----|------|------|
+| R1 | depcruise | presentation → infrastructure forbidden |
+| R2 | depcruise | feature deep imports forbidden |
+| R3 | depcruise | components → workflows/features forbidden |
+| R4 | depcruise | feature cross-import forbidden |
+| R5 | depcruise | workflow cross-import forbidden (internal/ only) |
+| R6 | depcruise | domain → infrastructure forbidden |
+| R7 | depcruise | shared → upper layers forbidden |
+| R8 | architecture-check | app/** no direct Meta DB bypass |
+| A1–A4 | architecture-check | grep patterns (see `scripts/architecture-check.ts`) |
+
+Run: `pnpm lint:arch` + `pnpm architecture-check`
 
 ## Dependencies
 
 - features must not import each other
-- shared packages must not import from apps or features
-- server-only: crypto, auth/server, auth/permissions, schema, rls, supabase-target/admin
+- workflows → feature index + shared(server)
+- shared packages must not import from apps or features (auth re-exports feature-access/setup)
+- server-only: workflows, feature-*, repository-kit, crypto, auth/server, schema, rls
 
 ## Dual Supabase model
 
@@ -34,6 +66,6 @@ packages/shared/*     → cross-cutting (crypto, rls, auth, schema)
 | Meta (`supabase/`) | Users, connections, RBAC, encrypted target credentials | Studio 54323, API 54321, DB 54322 |
 | Target (`supabase-target/`) | Sample schema for local dev and RLS testing | Studio 54423, API 54421, DB 54422 |
 
-Target projects are registered as connections in Meta. Service role keys are encrypted at rest using `ENCRYPTION_KEY`.
+Target projects are registered as connections in Meta. Service role keys are encrypted at rest using `ENCRYPTION_KEY`. Each connection has a per-connection webhook secret (`webhook_secret_enc`).
 
 Human-readable details: [docs/architecture.md](../../docs/architecture.md)

@@ -1,8 +1,12 @@
 import { setRequestLocale } from "next-intl/server";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { ShellExtrasRoot } from "@/components/layout/shell-context";
 import { redirect } from "@/i18n/routing";
-import { getShellConnections, getShellProfile } from "@/lib/shell-data";
+import {
+  getConnectionContext,
+  getConnectionIdFromHeaders,
+  getShellData,
+} from "@/lib/server/loaders/shell";
+import type { Profile } from "@/lib/types/database";
 
 export default async function DashboardLayout({
   children,
@@ -14,21 +18,32 @@ export default async function DashboardLayout({
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const profile = await getShellProfile();
-  if (!profile) {
+  const shellData = await getShellData();
+  if (!shellData) {
     redirect({ href: "/login", locale });
   }
 
-  const connections = await getShellConnections();
+  const profile = shellData!.profile as Profile;
+  const connections = shellData!.connections;
+  const connectionId = await getConnectionIdFromHeaders();
+  const connectionContext = connectionId
+    ? await getConnectionContext(profile, connectionId)
+    : null;
 
   return (
-    <ShellExtrasRoot>
-      <DashboardShell
-        profile={profile as NonNullable<typeof profile>}
-        connections={connections}
-      >
-        {children}
-      </DashboardShell>
-    </ShellExtrasRoot>
+    <DashboardShell
+      profile={profile}
+      connections={connections}
+      connectionContext={
+        connectionContext
+          ? {
+              connectionName: connectionContext.connection.name,
+              tablePermissions: connectionContext.permissions,
+            }
+          : undefined
+      }
+    >
+      {children}
+    </DashboardShell>
   );
 }

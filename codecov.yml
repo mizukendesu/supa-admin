@@ -14,12 +14,13 @@ comment:
 # Mirror Vitest excludes — barrels, env bootstrap, framework glue.
 # Keeps the badge aligned with in-scope business logic, not re-exports.
 ignore:
-  - "apps/web/lib/crypto/**"
-  - "apps/web/lib/schema/introspect.ts"
   - "apps/web/lib/types/**"
   - "apps/web/lib/permissions/**"
-  - "apps/web/lib/rls/sync.ts"
   - "apps/web/lib/supabase/**"
+  - "apps/web/lib/server/loaders/**"
+  - "apps/web/lib/data-layer/**"
+  - "apps/web/lib/webhooks/**"
+  - "apps/web/app/api/webhooks/**"
   - "apps/web/lib/utils.ts"
   - "apps/web/lib/env.ts"
   - "apps/web/lib/orpc/router.ts"

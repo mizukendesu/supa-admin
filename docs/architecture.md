@@ -5,23 +5,29 @@ SupaAdmin is a Turborepo + pnpm monorepo scoped as `@supa-admin/*`.
 ## Core concepts
 
 - **Meta DB**: Drizzle schema in `packages/shared/db` is the single source of truth. RLS policies and triggers live in SQL migrations under `supabase/migrations/`.
-- **API**: oRPC only via `apps/web/app/api/rpc` — no REST routes (except health check at `GET /api/rpc/health/ping` for Docker).
-- **RSC data**: Server Components fetch Meta DB data via `getServerCaller()` (`apps/web/lib/orpc/server-caller.ts`) — never `createMetaServerClient().from(...)` in pages.
+- **API**: oRPC via `apps/web/app/api/rpc`; CI schema sync Webhook at `POST /api/webhooks/schema-sync` (HMAC per connection).
+- **RSC data**: Server loaders in `apps/web/lib/server/loaders/` call `@supa-admin/workflows` — not Supabase `.from()` in pages.
+- **Persistence**: Meta business data via Drizzle `packages/shared/repository-kit` (Supabase Auth session only exception).
 - **Auth**: Supabase Auth on Meta. Target connections use a browser Supabase client (two-stage login).
 - **Local dev**: Dual Supabase stacks — Meta on 5432x ports, Target on 5442x (+100 offset).
 
 ## Layering
 
 ```
-apps/web/app          → UI (oRPC client for meta DB operations)
-apps/web/lib/orpc     → handlers (use cases, auth)
-packages/shared/*     → cross-cutting (crypto, rls, auth, schema, projections)
+apps/web/app              → UI, RSC, thin HTTP adapters
+apps/web/lib/orpc         → thin oRPC handlers → workflows / features
+packages/workflows        → multi-domain orchestration
+packages/features/*       → domain + application use cases
+packages/shared/repository-kit → Drizzle repositories
+packages/shared/*         → crypto, rls, auth, schema, ddd, errors, projections
 ```
 
 ## Dependencies
 
-- Shared packages must not import from apps.
-- Server-only modules: crypto, auth/server, auth/permissions, schema, rls, supabase-target/admin.
+- Feature packages must not import each other (use workflows).
+- Shared packages must not import from apps or features.
+- Architecture harness: `pnpm lint:arch` + `pnpm architecture-check` (see `.ai-context/rules/architecture.md`).
+- Server-only: workflows, feature-*, repository-kit, crypto, auth/server, schema, rls.
 
 ## Dual Supabase model
 

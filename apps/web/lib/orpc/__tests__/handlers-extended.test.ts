@@ -1,4 +1,5 @@
-import { mockSupabaseQuery } from "@supa-admin/vitest-config/supabase-mock";
+import { err, ok } from "@supa-admin/ddd";
+import { CustomError } from "@supa-admin/errors";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   adminCallContext,
@@ -7,84 +8,54 @@ import {
   TEST_IDS,
 } from "./helpers.js";
 
-const { mockServiceFrom, mockServerFrom, mockServiceAuth } = vi.hoisted(() => ({
-  mockServiceFrom: vi.fn(),
-  mockServerFrom: vi.fn(),
-  mockServiceAuth: {
-    admin: {
-      createUser: vi.fn().mockResolvedValue({
-        data: {
-          user: { id: "00000000-0000-4000-8000-000000000010" },
-        },
-        error: null,
-      }),
-    },
-  },
-}));
-
 vi.mock("server-only", () => ({}));
 
-vi.mock("@supa-admin/rls", () => ({
-  previewRlsSync: vi.fn(),
-  executeRlsSync: vi.fn().mockResolvedValue({ success: true, sql: "-- sql" }),
-  buildAppMetadataPermissions: vi.fn().mockResolvedValue({ permissions: {} }),
-  probeConnectionBootstrap: vi
-    .fn()
-    .mockResolvedValue({ ready: true, mode: "supaadmin" }),
-  executeTargetBootstrap: vi.fn().mockResolvedValue({ success: true }),
-  verifyConnectionBootstrap: vi
-    .fn()
-    .mockResolvedValue({ success: true, status: "ready" }),
-  syncTargetUserPermissions: vi
-    .fn()
-    .mockResolvedValue({ success: true, targetUserId: TEST_IDS.targetUser }),
-  getConnectionOnboardingStatus: vi.fn().mockResolvedValue({
-    steps: {
-      bootstrap: true,
-      schemaSynced: true,
-      rolesConfigured: true,
-      usersProvisioned: true,
-    },
-    complete: true,
-  }),
+vi.mock("@supa-admin/feature-setup", () => ({
+  isSetupComplete: vi.fn().mockResolvedValue(false),
+  createAdmin: vi.fn(),
 }));
 
-vi.mock("@supa-admin/schema", () => ({
-  fetchSchemaViaRest: vi.fn().mockResolvedValue({
-    tables: [{ table_name: "posts", columns: [] }],
-  }),
-  syncConnectionSchema: vi
-    .fn()
-    .mockResolvedValue({ success: true, tableCount: 1 }),
+vi.mock("@supa-admin/feature-connections", () => ({
+  listConnections: vi.fn(),
+  createConnection: vi.fn(),
+  getConnection: vi.fn(),
+  deleteConnection: vi.fn(),
+  listAccessibleConnections: vi.fn(),
+  getAccessibleConnection: vi.fn(),
+  getAnonKey: vi.fn(),
+  bootstrapProbe: vi.fn(),
+  bootstrapApply: vi.fn(),
+  bootstrapVerify: vi.fn(),
+  rotateWebhookSecret: vi.fn(),
+  revealWebhookSecret: vi.fn(),
+  previewConnectionRls: vi.fn(),
+  applyConnectionRls: vi.fn(),
 }));
 
-vi.mock("@supa-admin/crypto", () => ({
-  encrypt: vi.fn((v: string) => `enc:${v}`),
+vi.mock("@supa-admin/feature-access", () => ({
+  listRoles: vi.fn(),
+  createRole: vi.fn(),
+  getRolePermissions: vi.fn(),
+  getUserConnectionIds: vi.fn().mockResolvedValue([TEST_IDS.connection]),
+  updateUserOverrides: vi.fn(),
+  getUserOverrides: vi.fn(),
 }));
 
-vi.mock("@supa-admin/supabase-target/admin", () => ({
-  createTargetAdminClient: vi.fn(() => ({
-    auth: {
-      admin: {
-        createUser: vi.fn().mockResolvedValue({
-          data: { user: { id: TEST_IDS.targetUser } },
-          error: null,
-        }),
-      },
-    },
-  })),
+vi.mock("@supa-admin/feature-users", () => ({
+  listUsers: vi.fn(),
+  createUser: vi.fn(),
+  getUser: vi.fn(),
+  updateUser: vi.fn(),
 }));
 
-vi.mock("@supa-admin/utils", () => ({
-  validateTargetUrl: vi.fn(() => ({ ok: true })),
-}));
-
-vi.mock("@supa-admin/auth/server", () => ({
-  createMetaServiceClient: vi.fn(() => ({
-    from: mockServiceFrom,
-    auth: mockServiceAuth,
-  })),
-  createMetaServerClient: vi.fn(async () => ({ from: mockServerFrom })),
+vi.mock("@supa-admin/workflows", () => ({
+  createConnectionWorkflow: vi.fn(),
+  syncConnectionSchemaWorkflow: vi.fn(),
+  updateRolePermissionsWorkflow: vi.fn(),
+  provisionTargetUserWorkflow: vi.fn(),
+  getShellData: vi.fn(),
+  completeOnboarding: vi.fn(),
+  syncTargetSession: vi.fn(),
 }));
 
 vi.mock("@/lib/env", () => ({
@@ -95,11 +66,6 @@ vi.mock("@/lib/env", () => ({
 }));
 
 vi.mock("@supa-admin/auth/permissions", () => ({
-  isSetupComplete: vi.fn().mockResolvedValue(false),
-  requirePlatformAdmin: vi.fn().mockResolvedValue({
-    id: TEST_IDS.user,
-    role: "platform_admin",
-  }),
   getCurrentProfile: vi.fn().mockResolvedValue({
     id: TEST_IDS.user,
     role: "platform_admin",
@@ -115,30 +81,8 @@ describe("setupHandlers.createAdmin", () => {
   });
 
   it("when lock acquired, then creates admin user", async () => {
-    mockServiceFrom.mockImplementation((table: string) => {
-      if (table === "app_settings") {
-        return {
-          update: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                select: vi.fn().mockResolvedValue({
-                  data: [{ key: "setup_complete" }],
-                  error: null,
-                }),
-              }),
-            }),
-          }),
-        };
-      }
-      if (table === "profiles") {
-        return {
-          update: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ error: null }),
-          }),
-        };
-      }
-      return mockSupabaseQuery({ data: null, error: null });
-    });
+    const { createAdmin } = await import("@supa-admin/feature-setup");
+    vi.mocked(createAdmin).mockResolvedValue(ok({ success: true as const }));
 
     const { setupHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -161,49 +105,26 @@ describe("connectionsHandlers.create", () => {
   });
 
   it("when valid input, then creates connection", async () => {
-    mockServerFrom.mockImplementation((table: string) => {
-      if (table === "connections") {
-        return {
-          insert: vi.fn().mockReturnValue({
-            select: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: {
-                  id: TEST_IDS.connection,
-                  name: "Test",
-                  url: "https://example.supabase.co",
-                  schema_cached_at: null,
-                  bootstrap_status: "pending",
-                  bootstrap_verified_at: null,
-                },
-                error: null,
-              }),
-            }),
-          }),
-          update: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ error: null }),
-          }),
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: {
-                  id: TEST_IDS.connection,
-                  name: "Test",
-                  url: "https://example.supabase.co",
-                  schema_cached_at: null,
-                  bootstrap_status: "ready",
-                  bootstrap_verified_at: "2024-01-01T00:00:00Z",
-                },
-                error: null,
-              }),
-            }),
-          }),
-        };
-      }
-      if (table === "connection_tables") {
-        return { insert: vi.fn().mockResolvedValue({ error: null }) };
-      }
-      return mockSupabaseQuery({ data: null, error: null });
-    });
+    const { createConnectionWorkflow } = await import("@supa-admin/workflows");
+    vi.mocked(createConnectionWorkflow).mockResolvedValue(
+      ok({
+        connection: {
+          id: TEST_IDS.connection,
+          name: "Test",
+          url: "https://example.supabase.co",
+          schema_cached_at: null,
+          bootstrap_status: "ready",
+          bootstrap_verified_at: "2024-01-01T00:00:00Z",
+          anon_key_enc: "enc",
+          service_role_enc: "enc",
+          webhook_secret_enc: "enc",
+          created_by: TEST_IDS.user,
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+        tableCount: 1,
+      }),
+    );
 
     const { connectionsHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -227,15 +148,11 @@ describe("connectionsHandlers.schemaSync", () => {
   });
 
   it("when connection exists, then syncs schema", async () => {
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: {
-          id: TEST_IDS.connection,
-          url: "https://example.supabase.co",
-          service_role_enc: "enc",
-        },
-        error: null,
-      }),
+    const { syncConnectionSchemaWorkflow } = await import(
+      "@supa-admin/workflows"
+    );
+    vi.mocked(syncConnectionSchemaWorkflow).mockResolvedValue(
+      ok({ success: true as const, tableCount: 1 }),
     );
 
     const { connectionsHandlers } = await import("../handlers/index.js");
@@ -254,29 +171,15 @@ describe("rolesHandlers.updatePermissions", () => {
   });
 
   it("when permissions provided, then replaces role permissions", async () => {
-    mockServerFrom.mockImplementation((table: string) => {
-      if (table === "role_permissions") {
-        return {
-          delete: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockResolvedValue({ error: null }),
-            }),
-          }),
-          insert: vi.fn().mockResolvedValue({ error: null }),
-        };
-      }
-      if (table === "connections") {
-        return mockSupabaseQuery({
-          data: {
-            url: "https://example.supabase.co",
-            service_role_enc: "enc",
-            bootstrap_status: "ready",
-          },
-          error: null,
-        });
-      }
-      return mockSupabaseQuery({ data: null, error: null });
-    });
+    const { updateRolePermissionsWorkflow } = await import(
+      "@supa-admin/workflows"
+    );
+    vi.mocked(updateRolePermissionsWorkflow).mockResolvedValue(
+      ok({
+        success: true as const,
+        rlsSync: { success: true },
+      }),
+    );
 
     const { rolesHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -303,29 +206,18 @@ describe("rolesHandlers.updatePermissions", () => {
   });
 
   it("when bootstrap pending, then skips rls sync", async () => {
-    mockServerFrom.mockImplementation((table: string) => {
-      if (table === "role_permissions") {
-        return {
-          delete: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockResolvedValue({ error: null }),
-            }),
-          }),
-          insert: vi.fn().mockResolvedValue({ error: null }),
-        };
-      }
-      if (table === "connections") {
-        return mockSupabaseQuery({
-          data: {
-            url: "https://example.supabase.co",
-            service_role_enc: "enc",
-            bootstrap_status: "pending",
-          },
-          error: null,
-        });
-      }
-      return mockSupabaseQuery({ data: null, error: null });
-    });
+    const { updateRolePermissionsWorkflow } = await import(
+      "@supa-admin/workflows"
+    );
+    vi.mocked(updateRolePermissionsWorkflow).mockResolvedValue(
+      ok({
+        success: true as const,
+        rlsSync: {
+          success: false,
+          error: "Target bootstrap is not complete",
+        },
+      }),
+    );
 
     const { rolesHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -361,11 +253,15 @@ describe("usersHandlers.create", () => {
   });
 
   it("when valid input, then creates user", async () => {
-    mockServerFrom.mockReturnValue({
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: null }),
+    const { createUser } = await import("@supa-admin/feature-users");
+    vi.mocked(createUser).mockResolvedValue(
+      ok({
+        user: {
+          id: "00000000-0000-4000-8000-000000000010",
+          email: "user@example.com",
+        },
       }),
-    });
+    );
 
     const { usersHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -388,26 +284,12 @@ describe("provisionHandlers.createUser", () => {
   });
 
   it("when connection exists, then provisions target user", async () => {
-    mockServerFrom.mockImplementation((table: string) => {
-      if (table === "connections") {
-        return mockSupabaseQuery({
-          data: {
-            id: TEST_IDS.connection,
-            url: "https://example.supabase.co",
-            service_role_enc: "enc",
-            bootstrap_status: "ready",
-          },
-          error: null,
-        });
-      }
-      if (table === "target_user_mappings") {
-        return { upsert: vi.fn().mockResolvedValue({ error: null }) };
-      }
-      if (table === "profiles") {
-        return mockSupabaseQuery({ data: { role: "member" }, error: null });
-      }
-      return mockSupabaseQuery({ data: null, error: null });
-    });
+    const { provisionTargetUserWorkflow } = await import(
+      "@supa-admin/workflows"
+    );
+    vi.mocked(provisionTargetUserWorkflow).mockResolvedValue(
+      ok({ success: true as const, targetUserId: TEST_IDS.targetUser }),
+    );
 
     const { provisionHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -425,20 +307,16 @@ describe("provisionHandlers.createUser", () => {
   });
 
   it("when bootstrap pending, then throws PRECONDITION_FAILED", async () => {
-    mockServerFrom.mockImplementation((table: string) => {
-      if (table === "connections") {
-        return mockSupabaseQuery({
-          data: {
-            id: TEST_IDS.connection,
-            url: "https://example.supabase.co",
-            service_role_enc: "enc",
-            bootstrap_status: "pending",
-          },
-          error: null,
-        });
-      }
-      return mockSupabaseQuery({ data: null, error: null });
-    });
+    const { provisionTargetUserWorkflow } = await import(
+      "@supa-admin/workflows"
+    );
+    vi.mocked(provisionTargetUserWorkflow).mockResolvedValue(
+      err(
+        new CustomError("Target bootstrap is not complete", {
+          code: "feature-users/precondition-failed",
+        }),
+      ),
+    );
 
     const { provisionHandlers } = await import("../handlers/index.js");
     await expect(
@@ -462,17 +340,13 @@ describe("connectionsRlsHandlers.apply", () => {
   });
 
   it("when sync succeeds, then returns success", async () => {
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: {
-          id: TEST_IDS.connection,
-          url: "https://example.supabase.co",
-          service_role_enc: "enc",
-          bootstrap_status: "ready",
-        },
-        error: null,
-      }),
+    const { applyConnectionRls } = await import(
+      "@supa-admin/feature-connections"
     );
+    vi.mocked(applyConnectionRls).mockResolvedValue({
+      success: true as const,
+      sql: "-- sql",
+    });
 
     const { connectionsRlsHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -484,15 +358,12 @@ describe("connectionsRlsHandlers.apply", () => {
   });
 
   it("when bootstrap pending, then throws PRECONDITION_FAILED", async () => {
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: {
-          id: TEST_IDS.connection,
-          url: "https://example.supabase.co",
-          service_role_enc: "enc",
-          bootstrap_status: "pending",
-        },
-        error: null,
+    const { applyConnectionRls } = await import(
+      "@supa-admin/feature-connections"
+    );
+    vi.mocked(applyConnectionRls).mockRejectedValue(
+      new CustomError("Target bootstrap is not complete", {
+        code: "feature-connections/precondition-failed",
       }),
     );
 
@@ -513,22 +384,8 @@ describe("connectionsHandlers.bootstrap", () => {
   });
 
   it("when probe ready, then returns ready status", async () => {
-    const { probeConnectionBootstrap } = await import("@supa-admin/rls");
-    vi.mocked(probeConnectionBootstrap).mockResolvedValueOnce({
-      ready: true,
-      mode: "supaadmin",
-    });
-
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: {
-          id: TEST_IDS.connection,
-          url: "https://example.supabase.co",
-          service_role_enc: "enc",
-        },
-        error: null,
-      }),
-    );
+    const { bootstrapProbe } = await import("@supa-admin/feature-connections");
+    vi.mocked(bootstrapProbe).mockResolvedValueOnce({ status: "ready" });
 
     const { connectionsHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -540,22 +397,11 @@ describe("connectionsHandlers.bootstrap", () => {
   });
 
   it("when probe pending, then returns setup SQL", async () => {
-    const { probeConnectionBootstrap } = await import("@supa-admin/rls");
-    vi.mocked(probeConnectionBootstrap).mockResolvedValueOnce({
-      ready: false,
+    const { bootstrapProbe } = await import("@supa-admin/feature-connections");
+    vi.mocked(bootstrapProbe).mockResolvedValueOnce({
+      status: "pending",
       setupSql: "-- setup",
     });
-
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: {
-          id: TEST_IDS.connection,
-          url: "https://example.supabase.co",
-          service_role_enc: "enc",
-        },
-        error: null,
-      }),
-    );
 
     const { connectionsHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -567,16 +413,11 @@ describe("connectionsHandlers.bootstrap", () => {
   });
 
   it("when apply succeeds, then returns ready", async () => {
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: {
-          id: TEST_IDS.connection,
-          url: "https://example.supabase.co",
-          service_role_enc: "enc",
-        },
-        error: null,
-      }),
-    );
+    const { bootstrapApply } = await import("@supa-admin/feature-connections");
+    vi.mocked(bootstrapApply).mockResolvedValueOnce({
+      success: true as const,
+      status: "ready" as const,
+    });
 
     const { connectionsHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -588,21 +429,10 @@ describe("connectionsHandlers.bootstrap", () => {
   });
 
   it("when verify fails, then throws BAD_REQUEST with setup SQL", async () => {
-    const { verifyConnectionBootstrap } = await import("@supa-admin/rls");
-    vi.mocked(verifyConnectionBootstrap).mockResolvedValueOnce({
-      success: false,
-      error: "exec_sql not found",
-      setupSql: "-- manual setup",
-    });
-
-    mockServerFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: {
-          id: TEST_IDS.connection,
-          url: "https://example.supabase.co",
-          service_role_enc: "enc",
-        },
-        error: null,
+    const { bootstrapVerify } = await import("@supa-admin/feature-connections");
+    vi.mocked(bootstrapVerify).mockRejectedValueOnce(
+      new CustomError("exec_sql not found", {
+        metadata: { setupSql: "-- manual setup" },
       }),
     );
 
@@ -626,14 +456,11 @@ describe("connectionsHandlers.target.syncPermissions", () => {
   });
 
   it("when bootstrap ready, then syncs permissions", async () => {
-    mockServiceFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: {
-          url: "https://example.supabase.co",
-          service_role_enc: "enc",
-          bootstrap_status: "ready",
-        },
-        error: null,
+    const { syncTargetSession } = await import("@supa-admin/workflows");
+    vi.mocked(syncTargetSession).mockResolvedValue(
+      ok({
+        success: true,
+        targetUserId: TEST_IDS.targetUser,
       }),
     );
 
@@ -653,15 +480,13 @@ describe("connectionsHandlers.target.syncPermissions", () => {
   });
 
   it("when bootstrap pending, then throws PRECONDITION_FAILED", async () => {
-    mockServiceFrom.mockReturnValue(
-      mockSupabaseQuery({
-        data: {
-          url: "https://example.supabase.co",
-          service_role_enc: "enc",
-          bootstrap_status: "pending",
-        },
-        error: null,
-      }),
+    const { syncTargetSession } = await import("@supa-admin/workflows");
+    vi.mocked(syncTargetSession).mockResolvedValue(
+      err(
+        new CustomError("Target bootstrap is not complete", {
+          code: "workflows/precondition-failed",
+        }),
+      ),
     );
 
     const { connectionsHandlers } = await import("../handlers/index.js");
@@ -680,16 +505,18 @@ describe("connectionsHandlers.target.syncPermissions", () => {
 
 describe("connectionsHandlers.onboarding.status", () => {
   it("when allowed, then returns onboarding steps", async () => {
-    const { getConnectionOnboardingStatus } = await import("@supa-admin/rls");
-    vi.mocked(getConnectionOnboardingStatus).mockResolvedValueOnce({
-      steps: {
-        bootstrap: true,
-        schemaSynced: false,
-        rolesConfigured: false,
-        usersProvisioned: false,
-      },
-      complete: false,
-    });
+    const { completeOnboarding } = await import("@supa-admin/workflows");
+    vi.mocked(completeOnboarding).mockResolvedValueOnce(
+      ok({
+        steps: {
+          bootstrap: true,
+          schemaSynced: false,
+          rolesConfigured: false,
+          usersProvisioned: false,
+        },
+        complete: false,
+      }),
+    );
 
     const { connectionsHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(
@@ -708,17 +535,8 @@ describe("usersHandlers.update", () => {
   });
 
   it("when roleIds and connectionIds provided, then updates assignments", async () => {
-    mockServerFrom.mockImplementation((table: string) => {
-      if (table === "user_roles" || table === "connection_members") {
-        return {
-          delete: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ error: null }),
-          }),
-          insert: vi.fn().mockResolvedValue({ error: null }),
-        };
-      }
-      return mockSupabaseQuery({ data: null, error: null });
-    });
+    const { updateUser } = await import("@supa-admin/feature-users");
+    vi.mocked(updateUser).mockResolvedValue(ok({ success: true as const }));
 
     const { usersHandlers } = await import("../handlers/index.js");
     const result = await callWithInput(

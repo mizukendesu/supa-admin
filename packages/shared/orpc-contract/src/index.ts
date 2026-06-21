@@ -52,6 +52,31 @@ const tablePermission = z.object({
   can_delete: z.boolean(),
 });
 
+const permissionOverride = z.object({
+  table_name: z.string(),
+  can_read: z.boolean().nullable(),
+  can_create: z.boolean().nullable(),
+  can_update: z.boolean().nullable(),
+  can_delete: z.boolean().nullable(),
+});
+
+const userRoleAssignment = z.object({
+  role_id: z.string().uuid(),
+  roles: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    description: z.string().nullable().optional(),
+  }),
+});
+
+const userMembership = z.object({
+  connection_id: z.string().uuid(),
+  connections: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+  }),
+});
+
 export const setupContract = oc.router({
   createAdmin: oc
     .route({ method: "POST", path: "/setup/create-admin" })
@@ -201,6 +226,20 @@ export const connectionsContract = oc.router({
         }),
       ),
   }),
+  rotateWebhookSecret: oc
+    .route({
+      method: "POST",
+      path: "/connections/{id}/webhook-secret/rotate",
+    })
+    .input(z.object({ id: z.string().uuid() }))
+    .output(z.object({ webhookSecret: z.string() })),
+  revealWebhookSecret: oc
+    .route({
+      method: "POST",
+      path: "/connections/{id}/webhook-secret/reveal",
+    })
+    .input(z.object({ id: z.string().uuid() }))
+    .output(z.object({ webhookSecret: z.string() })),
 });
 
 export const connectionsRlsContract = oc.router({
@@ -288,8 +327,8 @@ export const usersContract = oc.router({
     .input(z.object({ id: z.string().uuid() }))
     .output(
       z.object({
-        userRoles: z.array(z.unknown()),
-        memberships: z.array(z.unknown()),
+        userRoles: z.array(userRoleAssignment),
+        memberships: z.array(userMembership),
       }),
     ),
   update: oc
@@ -352,12 +391,40 @@ export const healthContract = oc.router({
     .output(z.object({ ok: z.literal(true) })),
 });
 
+export const accessContract = oc.router({
+  getUserOverrides: oc
+    .route({ method: "GET", path: "/access/user-overrides" })
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        connectionId: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        overrides: z.array(permissionOverride),
+        rolePermissions: z.array(tablePermission),
+      }),
+    ),
+  updateUserOverrides: oc
+    .route({ method: "PUT", path: "/access/user-overrides" })
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        connectionId: z.string().uuid(),
+        overrides: z.array(permissionOverride),
+      }),
+    )
+    .output(z.object({ success: z.literal(true) })),
+});
+
 export const contract = oc.router({
   setup: setupContract,
   connections: connectionsContract,
   connectionsRls: connectionsRlsContract,
   roles: rolesContract,
   users: usersContract,
+  access: accessContract,
   provision: provisionContract,
   app: appContract,
   dashboard: dashboardContract,

@@ -1,4 +1,4 @@
-import { getConnectionOnboardingStatus } from "@supa-admin/rls";
+import { completeOnboarding } from "@supa-admin/workflows";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ConnectionTableList } from "@/components/connections/connection-table-list";
@@ -32,8 +32,12 @@ export default async function ConnectionTablesPage({
   }
 
   if (profile.role === "platform_admin") {
-    const onboarding = await getConnectionOnboardingStatus(connectionId);
-    if (!onboarding.complete) {
+    const onboardingResult = await completeOnboarding(
+      connectionId,
+      profile.id,
+      profile.role,
+    );
+    if (onboardingResult.ok && !onboardingResult.value.complete) {
       redirect({ href: `/${connectionId}/setup`, locale });
     }
   }

@@ -27,6 +27,8 @@ See [README.md](README.md) and [docs/](docs/) for architecture and testing conve
 
 ```bash
 pnpm lint
+pnpm lint:arch
+pnpm architecture-check
 pnpm typecheck
 pnpm test:turbo   # requires Meta Supabase on port 54322
 ```

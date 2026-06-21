@@ -30,7 +30,7 @@ pnpm dev               # http://127.0.0.1:3000
 
 Copy `.env.example` → `apps/web/.env.local` or run `pnpm setup:env-local` after `pnpm db:start`.
 
-Key variables: `NEXT_PUBLIC_META_SUPABASE_URL`, `META_SUPABASE_SERVICE_ROLE_KEY`, `ENCRYPTION_KEY`, `DATABASE_URL`.
+Key variables: `NEXT_PUBLIC_META_SUPABASE_URL`, `META_SUPABASE_SERVICE_ROLE_KEY`, `ENCRYPTION_KEY`, `DATABASE_URL`, `ALLOW_LOCAL_TARGET_URLS` (local Target HTTP only).
 
 ## Common commands
 
@@ -38,6 +38,7 @@ Key variables: `NEXT_PUBLIC_META_SUPABASE_URL`, `META_SUPABASE_SERVICE_ROLE_KEY`
 |---------|-------------|
 | `pnpm dev` | Start Next.js dev server |
 | `pnpm db:start:meta` | Meta Supabase only |
-| `pnpm db:reset` | Reset Meta DB |
+| `pnpm db:reset` | Reset Meta DB (uses `npx supabase`) |
 | `pnpm db:reset:target` | Reset Target DB |
+| `pnpm verify:dod` | Webhook DoD scenarios 14–16 (dev server + seed required) |
 | `pnpm lint` / `pnpm typecheck` | Pre-PR checks |

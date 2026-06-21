@@ -109,6 +109,14 @@
       "openRoles": "ロールを開く",
       "openUsers": "ユーザーを開く",
       "openConnect": "接続をテスト"
+    },
+    "webhookSecret": {
+      "reveal": "Webhook 秘密鍵",
+      "rotate": "Webhook ローテーション",
+      "title": "Webhook 秘密鍵",
+      "oneTimeHint": "この値は一度だけ表示されます。コピーして安全な場所に保管してください。",
+      "rotateConfirm": "Webhook 秘密鍵をローテーションしますか？",
+      "rotateWarning": "既存の Webhook 連携は新しい秘密鍵で更新が必要です。"
     }
   },
   "connectionTables": {
@@ -162,7 +170,9 @@
     "memberships": "接続先アクセス",
     "selectConnection": "接続先を選択",
     "provision": "接続先ユーザー作成",
-    "overrides": "個別権限上書き"
+    "overrides": "個別権限上書き",
+    "inherit": "継承",
+    "overrideHint": "クリックで 継承 → 許可 → 拒否 を切り替えます"
   },
   "roles": {
     "title": "ロール管理",

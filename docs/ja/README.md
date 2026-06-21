@@ -33,18 +33,25 @@ flowchart LR
   subgraph meta [Meta Supabase]
     Auth[Supabase Auth]
     Registry[接続 + RBAC]
-    EncKeys[暗号化 service_role キー]
+    EncKeys[暗号化キー + webhook secret]
   end
   subgraph app [SupaAdmin Web]
     UI[Next.js UI]
     ORPC[oRPC /api/rpc]
+    WH[Webhook /api/webhooks]
+  end
+  subgraph pkg [packages]
+    WF[workflows]
+    FEAT[features]
+    RK[repository-kit Drizzle]
   end
   subgraph targets [Target Supabase プロジェクト]
     T1[プロジェクト A]
     T2[プロジェクト B]
   end
   User -->|1 Meta ログイン| Auth
-  UI --> ORPC --> Registry
+  UI --> ORPC --> WF --> FEAT --> RK --> Registry
+  CI[他プロダクト CI] -->|schema sync HMAC| WH --> WF
   User -->|2 Target セッション| UI
   UI -->|ブラウザ CRUD| T1
   UI -->|ブラウザ CRUD| T2
@@ -69,6 +76,26 @@ pnpm dev               # http://127.0.0.1:3000
 
 1. **Meta ログイン** — Supabase Auth（Meta プロジェクト）
 2. **Target セッション** — 接続先ごとにブラウザ Supabase クライアントで認証
+
+## モノレポ構成
+
+```
+apps/web/                    Next.js (@supa-admin/web)
+packages/features/           ドメイン + application (feature-*)
+packages/workflows/          横断オーケストレーション
+packages/shared/             db, repository-kit, ddd, errors, ...
+```
+
+## 開発コマンド
+
+| コマンド | 説明 |
+|---------|------|
+| `pnpm lint:arch` | dependency-cruiser（R1–R7） |
+| `pnpm architecture-check` | 静的 grep ハーネス（A1–A4） |
+
+## Webhook（CI schema sync）
+
+接続ごとの secret を Connections UI で reveal/rotate。`POST /api/webhooks/schema-sync` に HMAC 付きで呼び出します。詳細は [English README](../../README.md#api) を参照。
 
 ## セキュリティ
 

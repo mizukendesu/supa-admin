@@ -1,6 +1,7 @@
 "use client";
 
 import type { Connection, Profile, Role } from "@supa-admin/projections";
+import { aggregateRolePermissions } from "@supa-admin/projections";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -36,8 +37,35 @@ type UserRow = Pick<
   "id" | "email" | "display_name" | "role" | "created_at"
 >;
 
+type OverrideField = "can_read" | "can_create" | "can_update" | "can_delete";
+
+type OverrideCell = Record<OverrideField, boolean | null>;
+
+const PERM_FIELDS: OverrideField[] = [
+  "can_read",
+  "can_create",
+  "can_update",
+  "can_delete",
+];
+
+function cycleOverrideValue(current: boolean | null): boolean | null {
+  if (current === null) return true;
+  if (current === true) return false;
+  return null;
+}
+
+function overrideCellLabel(
+  value: boolean | null,
+  inherited: boolean,
+  tInherit: string,
+): string {
+  if (value === null) return `${tInherit} (${inherited ? "✓" : "—"})`;
+  return value ? "✓" : "✗";
+}
+
 export function UsersManager() {
   const t = useTranslations("users");
+  const tRoles = useTranslations("roles");
   const tAuth = useTranslations("auth");
   const tCommon = useTranslations("common");
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -57,6 +85,12 @@ export function UsersManager() {
   const [provisionConnectionId, setProvisionConnectionId] = useState("");
   const [provisionEmail, setProvisionEmail] = useState("");
   const [provisionPassword, setProvisionPassword] = useState("");
+  const [overrideConnectionId, setOverrideConnectionId] = useState("");
+  const [overrideTables, setOverrideTables] = useState<string[]>([]);
+  const [roleBaseline, setRoleBaseline] = useState<
+    Record<string, Record<OverrideField, boolean>>
+  >({});
+  const [overrides, setOverrides] = useState<Record<string, OverrideCell>>({});
 
   const platformRoleItems = useMemo(
     () => ({
@@ -69,6 +103,15 @@ export function UsersManager() {
     () => Object.fromEntries(connections.map((c) => [c.id, c.name])),
     [connections],
   );
+  const overrideConnectionItems = useMemo(
+    () =>
+      Object.fromEntries(
+        connections
+          .filter((c) => editConnectionIds.includes(c.id))
+          .map((c) => [c.id, c.name]),
+      ),
+    [connections, editConnectionIds],
+  );
 
   useEffect(() => {
     void loadUsers();
@@ -77,6 +120,76 @@ export function UsersManager() {
       .list()
       .then((d) => setConnections(d.connections ?? []));
   }, []);
+
+  useEffect(() => {
+    if (!editUser || !overrideConnectionId) {
+      setOverrideTables([]);
+      setRoleBaseline({});
+      setOverrides({});
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadOverrideMatrix() {
+      const user = editUser;
+      if (!user) return;
+      try {
+        const [connData, accessData] = await Promise.all([
+          orpcBrowser.connections.get({ id: overrideConnectionId }),
+          orpcBrowser.access.getUserOverrides({
+            userId: user.id,
+            connectionId: overrideConnectionId,
+          }),
+        ]);
+        if (cancelled) return;
+
+        const tableNames = (connData.tables ?? []).map((tbl) => tbl.table_name);
+        setOverrideTables(tableNames);
+
+        const baseline = aggregateRolePermissions(accessData.rolePermissions);
+        const baselineRecord: typeof roleBaseline = {};
+        for (const tableName of tableNames) {
+          const perm = baseline.get(tableName);
+          baselineRecord[tableName] = {
+            can_read: perm?.can_read ?? false,
+            can_create: perm?.can_create ?? false,
+            can_update: perm?.can_update ?? false,
+            can_delete: perm?.can_delete ?? false,
+          };
+        }
+        setRoleBaseline(baselineRecord);
+
+        const overrideMap: Record<string, OverrideCell> = {};
+        for (const tableName of tableNames) {
+          overrideMap[tableName] = {
+            can_read: null,
+            can_create: null,
+            can_update: null,
+            can_delete: null,
+          };
+        }
+        for (const row of accessData.overrides ?? []) {
+          if (!overrideMap[row.table_name]) continue;
+          overrideMap[row.table_name] = {
+            can_read: row.can_read,
+            can_create: row.can_create,
+            can_update: row.can_update,
+            can_delete: row.can_delete,
+          };
+        }
+        setOverrides(overrideMap);
+      } catch (err) {
+        if (cancelled) return;
+        toast.error(err instanceof Error ? err.message : tCommon("error"));
+      }
+    }
+
+    void loadOverrideMatrix();
+    return () => {
+      cancelled = true;
+    };
+  }, [editUser, overrideConnectionId, tCommon]);
 
   async function loadUsers() {
     const data = await orpcBrowser.users.list();
@@ -97,14 +210,16 @@ export function UsersManager() {
   async function openEdit(user: UserRow) {
     setEditUser(user);
     setProvisionEmail(user.email);
+    setOverrideConnectionId("");
     const detail = await orpcBrowser.users.get({ id: user.id });
     const userRoles = (detail.userRoles ?? []) as Array<{ role_id: string }>;
     const memberships = (detail.memberships ?? []) as Array<{
       connection_id: string;
     }>;
+    const connectionIds = memberships.map((m) => m.connection_id);
     setEditRoleIds(userRoles.map((r) => r.role_id));
-    setEditConnectionIds(memberships.map((m) => m.connection_id));
-    setProvisionConnectionId(memberships[0]?.connection_id ?? "");
+    setEditConnectionIds(connectionIds);
+    setProvisionConnectionId(connectionIds[0] ?? "");
   }
 
   async function saveEdit() {
@@ -118,6 +233,29 @@ export function UsersManager() {
       toast.success(tCommon("success"));
       setEditUser(null);
       await loadUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : tCommon("error"));
+    }
+  }
+
+  async function saveOverrides() {
+    if (!editUser || !overrideConnectionId) return;
+    try {
+      const payload = Object.entries(overrides)
+        .filter(([, cells]) =>
+          PERM_FIELDS.some((field) => cells[field] !== null),
+        )
+        .map(([table_name, cells]) => ({
+          table_name,
+          ...cells,
+        }));
+
+      await orpcBrowser.access.updateUserOverrides({
+        userId: editUser.id,
+        connectionId: overrideConnectionId,
+        overrides: payload,
+      });
+      toast.success(tCommon("success"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : tCommon("error"));
     }
@@ -141,6 +279,24 @@ export function UsersManager() {
 
   function toggleId(list: string[], id: string): string[] {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+  }
+
+  function toggleOverride(tableName: string, field: OverrideField) {
+    setOverrides((prev) => {
+      const current = prev[tableName] ?? {
+        can_read: null,
+        can_create: null,
+        can_update: null,
+        can_delete: null,
+      };
+      return {
+        ...prev,
+        [tableName]: {
+          ...current,
+          [field]: cycleOverrideValue(current[field]),
+        },
+      };
+    });
   }
 
   return (
@@ -205,7 +361,7 @@ export function UsersManager() {
         open={editUser != null}
         onOpenChange={(next) => !next && setEditUser(null)}
       >
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-auto">
           <DialogHeader>
             <DialogTitle>
               {editUser?.display_name ?? editUser?.email}
@@ -252,6 +408,88 @@ export function UsersManager() {
                 </div>
               </div>
               <Button onClick={saveEdit}>{tCommon("save")}</Button>
+
+              <div className="space-y-3 border-t pt-4">
+                <Label>{t("overrides")}</Label>
+                <Select
+                  items={overrideConnectionItems}
+                  value={overrideConnectionId}
+                  onValueChange={(v) => setOverrideConnectionId(v ?? "")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("selectConnection")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {connections
+                      .filter((c) => editConnectionIds.includes(c.id))
+                      .map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {overrideConnectionId && overrideTables.length > 0 ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      {t("overrideHint")}
+                    </p>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                          <TableHead>{tRoles("tableName")}</TableHead>
+                          {PERM_FIELDS.map((field) => (
+                            <TableHead key={field}>
+                              {tRoles(
+                                field === "can_read"
+                                  ? "canRead"
+                                  : field === "can_create"
+                                    ? "canCreate"
+                                    : field === "can_update"
+                                      ? "canUpdate"
+                                      : "canDelete",
+                              )}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {overrideTables.map((tableName) => (
+                          <TableRow key={tableName}>
+                            <TableCell>{tableName}</TableCell>
+                            {PERM_FIELDS.map((field) => {
+                              const value =
+                                overrides[tableName]?.[field] ?? null;
+                              const inherited =
+                                roleBaseline[tableName]?.[field] ?? false;
+                              return (
+                                <TableCell key={field}>
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      value === null ? "outline" : "secondary"
+                                    }
+                                    onClick={() =>
+                                      toggleOverride(tableName, field)
+                                    }
+                                  >
+                                    {overrideCellLabel(
+                                      value,
+                                      inherited,
+                                      t("inherit"),
+                                    )}
+                                  </Button>
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <Button onClick={saveOverrides}>{tCommon("save")}</Button>
+                  </>
+                ) : null}
+              </div>
 
               <div className="space-y-3 border-t pt-4">
                 <Label>{t("provision")}</Label>

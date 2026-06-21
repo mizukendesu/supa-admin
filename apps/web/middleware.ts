@@ -78,6 +78,7 @@ function withSecurityHeaders(
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
 
   const location = response.headers.get("location");
   const secured = location

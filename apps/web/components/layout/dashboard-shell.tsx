@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { AppHeader } from "@/components/layout/app-header";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { PageContainer } from "@/components/layout/page-container";
-import { useShellExtras } from "@/components/layout/shell-context";
 import {
   Sidebar,
   SidebarContent,
@@ -26,9 +25,15 @@ import { Link, usePathname } from "@/i18n/routing";
 import type { Profile, ResolvedPermission } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
+type ConnectionContextProps = {
+  connectionName: string;
+  tablePermissions: ResolvedPermission[];
+};
+
 type DashboardShellProps = {
   profile: Profile;
   connections: Array<{ id: string; name: string }>;
+  connectionContext?: ConnectionContextProps;
   children: React.ReactNode;
 };
 
@@ -97,11 +102,13 @@ function buildBreadcrumbs(
 export function DashboardShell({
   profile,
   connections,
+  connectionContext,
   children,
 }: DashboardShellProps) {
   const t = useTranslations();
   const pathname = usePathname();
-  const { tablePermissions, connectionName } = useShellExtras();
+  const tablePermissions = connectionContext?.tablePermissions ?? [];
+  const connectionName = connectionContext?.connectionName;
   const isAdmin = profile.role === "platform_admin";
   const activeConnectionId = deriveConnectionId(pathname);
   const breadcrumbs = buildBreadcrumbs(

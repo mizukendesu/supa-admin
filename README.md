@@ -51,18 +51,25 @@ flowchart LR
   subgraph meta [Meta Supabase]
     Auth[Supabase Auth]
     Registry[Connections + RBAC]
-    EncKeys[Encrypted service_role keys]
+    EncKeys[Encrypted keys + webhook secrets]
   end
   subgraph app [SupaAdmin Web]
     UI[Next.js UI]
     ORPC[oRPC /api/rpc]
+    WH[Webhook /api/webhooks]
+  end
+  subgraph pkg [packages]
+    WF[workflows]
+    FEAT[features]
+    RK[repository-kit Drizzle]
   end
   subgraph targets [Target Supabase Projects]
     T1[Project A]
     T2[Project B]
   end
   User -->|1 Meta login| Auth
-  UI --> ORPC --> Registry
+  UI --> ORPC --> WF --> FEAT --> RK --> Registry
+  CI[Product CI] -->|schema sync HMAC| WH --> WF
   User -->|2 Target session| UI
   UI -->|browser client CRUD| T1
   UI -->|browser client CRUD| T2
@@ -106,12 +113,14 @@ pnpm dev               # http://127.0.0.1:3000
 ## Monorepo structure
 
 ```
-apps/web/              Next.js app (@supa-admin/web)
-packages/shared/       db, crypto, auth, rls, schema, orpc-contract, projections, ui, ...
-tooling/               tsconfig, vitest-config
-supabase/              Meta migrations
-supabase-target/       Target sample schema + RLS helpers
-scripts/               db:start, setup:local (cross-platform tsx)
+apps/web/                    Next.js app (@supa-admin/web)
+packages/features/           Domain + application use cases (feature-*)
+packages/workflows/          Multi-domain orchestration
+packages/shared/             db, ddd, errors, repository-kit, crypto, auth, rls, schema, ...
+tooling/                     tsconfig, vitest-config
+supabase/                    Meta migrations (CI-generated from Drizzle)
+supabase-target/             Target sample schema + RLS helpers
+scripts/                     db:start, architecture-check, setup:local
 ```
 
 ## Scripts
@@ -123,6 +132,8 @@ scripts/               db:start, setup:local (cross-platform tsx)
 | `pnpm test` | Vitest (Meta Supabase required) |
 | `pnpm test:coverage` | Vitest with coverage report |
 | `pnpm lint` | Biome check |
+| `pnpm lint:arch` | dependency-cruiser architecture rules (R1–R7) |
+| `pnpm architecture-check` | Static grep harness (A1–A4) |
 | `pnpm typecheck` | Turbo typecheck |
 | `pnpm db:start` | Start Meta + Target Supabase |
 | `pnpm setup:local` | Full local bootstrap |
@@ -142,7 +153,18 @@ Copy `.env.example` → `apps/web/.env.local` or run `pnpm setup:env-local` afte
 
 ## API
 
-All meta DB operations use **oRPC** at `/api/rpc`. Target CRUD uses the browser Supabase client directly.
+Meta DB operations use **oRPC** at `/api/rpc`. Target CRUD uses the browser Supabase client directly.
+
+**CI schema sync Webhook** (per-connection HMAC secret):
+
+```bash
+curl -X POST "$APP_URL/api/webhooks/schema-sync" \
+  -H "Content-Type: application/json" \
+  -H "X-SupaAdmin-Signature: sha256=$(printf '%s' '{"connectionId":"..."}' | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')" \
+  -d '{"connectionId":"<uuid>"}'
+```
+
+Reveal or rotate webhook secrets from the admin **Connections** UI. Secrets are stored encrypted in Meta as `webhook_secret_enc`.
 
 ## Security
 
@@ -168,8 +190,10 @@ docker compose up --build
 
 - Multi-connection Target Supabase management
 - Two-stage auth (Meta + Target)
-- Dynamic CRUD with RBAC
+- Dynamic CRUD with RBAC and per-user permission overrides
 - RLS sync preview/apply
+- CI schema sync webhook (HMAC per connection)
+- Architecture harness (`lint:arch`, `architecture-check`)
 - ja/en i18n
 
 ## Out of scope

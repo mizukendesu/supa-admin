@@ -39,6 +39,7 @@ const lines = [
   `TEST_DATABASE_URL=${meta.DB_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres"}`,
   `ENCRYPTION_KEY=${encryptionKey}`,
   `SETUP_SECRET=${setupSecret}`,
+  `ALLOW_LOCAL_TARGET_URLS=true`,
   `NEXT_PUBLIC_APP_URL=http://localhost:3000`,
   ``,
 ];

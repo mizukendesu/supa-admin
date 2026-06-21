@@ -1,4 +1,4 @@
-import { getConnectionOnboardingStatus } from "@supa-admin/rls";
+import { completeOnboarding } from "@supa-admin/workflows";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ConnectionOnboardingWizard } from "@/components/connections/connection-onboarding-wizard";
@@ -58,8 +58,12 @@ export default async function TargetSetupPage({
   }
 
   if (bootstrapStatus === "ready") {
-    const onboarding = await getConnectionOnboardingStatus(connectionId);
-    if (onboarding.complete) {
+    const onboardingResult = await completeOnboarding(
+      connectionId,
+      profile.id,
+      profile.role,
+    );
+    if (onboardingResult.ok && onboardingResult.value.complete) {
       redirect({ href: `/${connectionId}`, locale });
     }
   }
@@ -68,7 +72,15 @@ export default async function TargetSetupPage({
     notFound();
   }
 
-  const onboarding = await getConnectionOnboardingStatus(connectionId);
+  const onboardingResult = await completeOnboarding(
+    connectionId,
+    profile.id,
+    profile.role,
+  );
+  if (!onboardingResult.ok) {
+    notFound();
+  }
+  const onboarding = onboardingResult.value;
 
   return (
     <div className="space-y-6">

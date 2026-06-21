@@ -10,8 +10,15 @@ const PRIVATE_HOST_PATTERNS = [
   /^\[::ffff:/i,
 ];
 
+const LOCAL_DEV_HOST_PATTERNS = [/^localhost$/i, /^127\.\d+\.\d+\.\d+$/];
+
+export type ValidateTargetUrlOptions = {
+  allowLocalTargetUrls?: boolean;
+};
+
 export function validateTargetUrl(
   url: string,
+  options: ValidateTargetUrlOptions = {},
 ): { ok: true } | { ok: false; reason: string } {
   let parsed: URL;
   try {
@@ -20,11 +27,22 @@ export function validateTargetUrl(
     return { ok: false, reason: "Invalid URL" };
   }
 
+  const hostname = parsed.hostname.toLowerCase();
+  const isLocalHost = LOCAL_DEV_HOST_PATTERNS.some((pattern) =>
+    pattern.test(hostname),
+  );
+
+  if (options.allowLocalTargetUrls && isLocalHost) {
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { ok: false, reason: "Only HTTP(S) URLs are allowed" };
+    }
+    return { ok: true };
+  }
+
   if (parsed.protocol !== "https:") {
     return { ok: false, reason: "Only HTTPS URLs are allowed" };
   }
 
-  const hostname = parsed.hostname.toLowerCase();
   if (PRIVATE_HOST_PATTERNS.some((pattern) => pattern.test(hostname))) {
     return {
       ok: false,

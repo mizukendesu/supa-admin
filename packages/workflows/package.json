@@ -1,0 +1,32 @@
+{
+  "name": "@supa-admin/workflows",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@supa-admin/crypto": "workspace:*",
+    "@supa-admin/ddd": "workspace:*",
+    "@supa-admin/errors": "workspace:*",
+    "@supa-admin/feature-access": "workspace:*",
+    "@supa-admin/feature-connections": "workspace:*",
+    "@supa-admin/feature-setup": "workspace:*",
+    "@supa-admin/feature-users": "workspace:*",
+    "@supa-admin/projections": "workspace:*",
+    "@supa-admin/rate-limit": "workspace:*",
+    "@supa-admin/repository-kit": "workspace:*",
+    "@supa-admin/rls": "workspace:*",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@supa-admin/tsconfig": "workspace:*",
+    "@supa-admin/vitest-config": "workspace:*",
+    "@types/node": "^20",
+    "typescript": "~5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

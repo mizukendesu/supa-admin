@@ -28,4 +28,12 @@ describe("validateTargetUrl", () => {
       expect(result.ok).toBe(false);
     }
   });
+
+  it("allows localhost HTTP when allowLocalTargetUrls is true", () => {
+    expect(
+      validateTargetUrl("http://127.0.0.1:54421", {
+        allowLocalTargetUrls: true,
+      }),
+    ).toEqual({ ok: true });
+  });
 });

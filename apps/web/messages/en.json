@@ -109,6 +109,14 @@
       "openRoles": "Open roles",
       "openUsers": "Open users",
       "openConnect": "Test connect"
+    },
+    "webhookSecret": {
+      "reveal": "Webhook secret",
+      "rotate": "Rotate webhook",
+      "title": "Webhook secret",
+      "oneTimeHint": "This value is shown once. Copy it and store it securely.",
+      "rotateConfirm": "Rotate webhook secret?",
+      "rotateWarning": "Existing webhook integrations must be updated with the new secret."
     }
   },
   "connectionTables": {
@@ -162,7 +170,9 @@
     "memberships": "Connection access",
     "selectConnection": "Select connection",
     "provision": "Provision target user",
-    "overrides": "Permission overrides"
+    "overrides": "Permission overrides",
+    "inherit": "Inherit",
+    "overrideHint": "Click to cycle inherit → allow → deny"
   },
   "roles": {
     "title": "Role management",

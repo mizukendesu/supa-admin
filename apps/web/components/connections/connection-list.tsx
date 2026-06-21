@@ -1,7 +1,8 @@
 "use client";
 
 import type { BootstrapStatus } from "@supa-admin/projections";
-import { Plug } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { KeyRound, Plug, RotateCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -35,6 +36,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  createOrpcQueryOptions,
+  orpcQueryKeys,
+} from "@/lib/data-layer/orpc-query";
 import { orpcBrowser } from "@/lib/orpc/client.browser";
 import { TargetSetupDialog } from "./target-setup-dialog";
 
@@ -47,16 +52,33 @@ type ConnectionRow = {
 };
 
 type ConnectionListProps = {
-  connections: ConnectionRow[];
+  connections?: ConnectionRow[];
 };
 
-export function ConnectionList({ connections }: ConnectionListProps) {
+const orpcOptions = createOrpcQueryOptions(orpcBrowser);
+
+export function ConnectionList({
+  connections: initialConnections,
+}: ConnectionListProps) {
   const t = useTranslations();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState("");
   const [rlsSql, setRlsSql] = useState("");
   const [rlsOpen, setRlsOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
+  const [webhookOpen, setWebhookOpen] = useState(false);
+
+  const { data } = useQuery({
+    ...orpcOptions.connections.list,
+    enabled: initialConnections === undefined,
+    initialData: initialConnections
+      ? { connections: initialConnections }
+      : undefined,
+  });
+
+  const connections = data?.connections ?? initialConnections ?? [];
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -67,10 +89,19 @@ export function ConnectionList({ connections }: ConnectionListProps) {
     );
   }, [connections, filter]);
 
+  async function invalidateConnections() {
+    await queryClient.invalidateQueries({
+      queryKey: orpcQueryKeys.connections.all(),
+    });
+  }
+
   async function syncSchema(id: string) {
     try {
-      const data = await orpcBrowser.connections.schemaSync({ id });
-      toast.success(t("connections.schemaSynced", { count: data.tableCount }));
+      const result = await orpcBrowser.connections.schemaSync({ id });
+      toast.success(
+        t("connections.schemaSynced", { count: result.tableCount }),
+      );
+      await invalidateConnections();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.error"));
     }
@@ -79,8 +110,8 @@ export function ConnectionList({ connections }: ConnectionListProps) {
   async function previewRls(id: string) {
     setActiveId(id);
     try {
-      const data = await orpcBrowser.connectionsRls.preview({ id });
-      setRlsSql(data.sql ?? "");
+      const result = await orpcBrowser.connectionsRls.preview({ id });
+      setRlsSql(result.sql ?? "");
       setRlsOpen(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.error"));
@@ -93,6 +124,7 @@ export function ConnectionList({ connections }: ConnectionListProps) {
       await orpcBrowser.connectionsRls.apply({ id: activeId });
       toast.success(t("common.success"));
       setRlsOpen(false);
+      await invalidateConnections();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.error"));
     }
@@ -101,9 +133,30 @@ export function ConnectionList({ connections }: ConnectionListProps) {
   async function deleteConnection(id: string) {
     try {
       await orpcBrowser.connections.delete({ id });
-      window.location.reload();
+      await invalidateConnections();
     } catch {
       toast.error(t("common.error"));
+    }
+  }
+
+  async function revealWebhookSecret(id: string) {
+    try {
+      const result = await orpcBrowser.connections.revealWebhookSecret({ id });
+      setWebhookSecret(result.webhookSecret);
+      setWebhookOpen(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.error"));
+    }
+  }
+
+  async function rotateWebhookSecret(id: string) {
+    try {
+      const result = await orpcBrowser.connections.rotateWebhookSecret({ id });
+      setWebhookSecret(result.webhookSecret);
+      setWebhookOpen(true);
+      toast.success(t("common.success"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.error"));
     }
   }
 
@@ -197,6 +250,49 @@ export function ConnectionList({ connections }: ConnectionListProps) {
                   >
                     {t("connections.syncRls")}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => revealWebhookSecret(conn.id)}
+                    disabled={conn.bootstrap_status !== "ready"}
+                  >
+                    <KeyRound className="size-3.5" />
+                    {t("connections.webhookSecret.reveal")}
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger
+                      render={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={conn.bootstrap_status !== "ready"}
+                        />
+                      }
+                    >
+                      <RotateCw className="size-3.5" />
+                      {t("connections.webhookSecret.rotate")}
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          {t("connections.webhookSecret.rotateConfirm")}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {t("connections.webhookSecret.rotateWarning")}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>
+                          {t("common.cancel")}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => rotateWebhookSecret(conn.id)}
+                        >
+                          {t("connections.webhookSecret.rotate")}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                   <AlertDialog>
                     <AlertDialogTrigger
                       render={<Button size="sm" variant="destructive" />}
@@ -259,6 +355,39 @@ export function ConnectionList({ connections }: ConnectionListProps) {
               {t("rls.copySql")}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={webhookOpen}
+        onOpenChange={(open) => {
+          setWebhookOpen(open);
+          if (!open) setWebhookSecret(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("connections.webhookSecret.title")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {t("connections.webhookSecret.oneTimeHint")}
+          </p>
+          <Input
+            readOnly
+            value={webhookSecret ?? ""}
+            className="font-mono text-xs"
+          />
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (webhookSecret) {
+                void navigator.clipboard.writeText(webhookSecret);
+                toast.success(t("common.success"));
+              }
+            }}
+          >
+            {t("rls.copySql")}
+          </Button>
         </DialogContent>
       </Dialog>
     </>

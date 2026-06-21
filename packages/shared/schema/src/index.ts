@@ -2,6 +2,13 @@ import "server-only";
 import type { ColumnMeta } from "@supa-admin/projections";
 import { validateTargetUrl } from "@supa-admin/utils";
 
+function allowLocalTargetUrlsFromEnv() {
+  const flag = process.env.ALLOW_LOCAL_TARGET_URLS;
+  return {
+    allowLocalTargetUrls: flag === "true" || flag === "1",
+  };
+}
+
 export async function fetchSchemaViaRest(
   url: string,
   serviceRoleEnc: string,
@@ -9,7 +16,7 @@ export async function fetchSchemaViaRest(
   tables: { table_name: string; columns: ColumnMeta[] }[];
   error?: string;
 }> {
-  const urlCheck = validateTargetUrl(url);
+  const urlCheck = validateTargetUrl(url, allowLocalTargetUrlsFromEnv());
   if (!urlCheck.ok) {
     return { tables: [], error: urlCheck.reason };
   }
@@ -68,44 +75,4 @@ export async function fetchSchemaViaRest(
   }
 
   return { tables };
-}
-
-export async function syncConnectionSchema(
-  connectionId: string,
-  url: string,
-  serviceRoleEnc: string,
-) {
-  const { createMetaServerClient } = await import("@supa-admin/auth/server");
-  const supabase = await createMetaServerClient();
-
-  const result = await fetchSchemaViaRest(url, serviceRoleEnc);
-
-  if (result.error && result.tables.length === 0) {
-    return { success: false, error: result.error };
-  }
-
-  await supabase
-    .from("connection_tables")
-    .delete()
-    .eq("connection_id", connectionId);
-
-  if (result.tables.length > 0) {
-    const { error: insertError } = await supabase
-      .from("connection_tables")
-      .insert(
-        result.tables.map((t) => ({
-          connection_id: connectionId,
-          table_name: t.table_name,
-          columns: t.columns,
-        })),
-      );
-    if (insertError) return { success: false, error: insertError.message };
-  }
-
-  await supabase
-    .from("connections")
-    .update({ schema_cached_at: new Date().toISOString() })
-    .eq("id", connectionId);
-
-  return { success: true, tableCount: result.tables.length };
 }

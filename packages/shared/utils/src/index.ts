@@ -6,4 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export { sanitizePostgrestFilter } from "./postgrest";
-export { validateTargetUrl } from "./validate-url";
+export {
+  type ValidateTargetUrlOptions,
+  validateTargetUrl,
+} from "./validate-url";

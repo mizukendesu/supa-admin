@@ -1,4 +1,5 @@
 import {
+  accessHandlers,
   appHandlers,
   connectionsHandlers,
   connectionsRlsHandlers,
@@ -15,6 +16,7 @@ export const router = {
   connections: connectionsHandlers,
   connectionsRls: connectionsRlsHandlers,
   roles: rolesHandlers,
+  access: accessHandlers,
   users: usersHandlers,
   provision: provisionHandlers,
   app: appHandlers,

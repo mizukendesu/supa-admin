@@ -26,6 +26,7 @@ export const connections = pgTable("connections", {
   url: text("url").notNull(),
   anonKeyEnc: text("anon_key_enc").notNull(),
   serviceRoleEnc: text("service_role_enc").notNull(),
+  webhookSecretEnc: text("webhook_secret_enc"),
   schemaCachedAt: timestamp("schema_cached_at", { withTimezone: true }),
   bootstrapStatus: text("bootstrap_status").notNull().default("pending"),
   bootstrapVerifiedAt: timestamp("bootstrap_verified_at", {

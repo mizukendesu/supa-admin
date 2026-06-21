@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages, setRequestLocale } from "next-intl/server";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -45,10 +46,12 @@ export default async function LocaleLayout({
       <body className="min-h-full antialiased">
         <ThemeProvider>
           <NextIntlClientProvider messages={messages}>
-            <TooltipProvider>
-              {children}
-              <Toaster />
-            </TooltipProvider>
+            <QueryProvider>
+              <TooltipProvider>
+                {children}
+                <Toaster />
+              </TooltipProvider>
+            </QueryProvider>
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>
