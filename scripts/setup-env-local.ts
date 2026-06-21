@@ -40,6 +40,7 @@ const lines = [
   `ENCRYPTION_KEY=${encryptionKey}`,
   `SETUP_SECRET=${setupSecret}`,
   `ALLOW_LOCAL_TARGET_URLS=true`,
+  `REDIS_URL=redis://127.0.0.1:6379`,
   `NEXT_PUBLIC_APP_URL=http://localhost:3000`,
   ``,
 ];

@@ -51,6 +51,35 @@ loadEnv();
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://127.0.0.1:3000";
 const encKey = process.env.ENCRYPTION_KEY!;
 
+async function preflight(): Promise<void> {
+  if (!process.env.REDIS_URL) {
+    throw new Error(
+      "REDIS_URL is missing from apps/web/.env.local. Run pnpm setup:env-local (or add REDIS_URL=redis://127.0.0.1:6379) and restart pnpm dev.",
+    );
+  }
+  if (process.env.ALLOW_LOCAL_TARGET_URLS !== "true") {
+    throw new Error(
+      "ALLOW_LOCAL_TARGET_URLS=true is required in apps/web/.env.local for local Target schema sync. Restart pnpm dev after updating.",
+    );
+  }
+
+  try {
+    const health = await fetch(baseUrl, { redirect: "manual" });
+    if (health.status >= 500) {
+      throw new Error(
+        `Dev server at ${baseUrl} returned ${health.status}. Start with: pnpm dev`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Dev server")) {
+      throw error;
+    }
+    throw new Error(
+      `Dev server not reachable at ${baseUrl}. Start with: pnpm dev`,
+    );
+  }
+}
+
 async function assertScenario(name: string, fn: () => Promise<void>) {
   try {
     await fn();
@@ -78,6 +107,8 @@ async function postWebhook(
 }
 
 async function main() {
+  await preflight();
+
   const db = createClient(
     process.env.DATABASE_URL ??
       "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
@@ -105,8 +136,9 @@ async function main() {
       async () => {
         const response = await postWebhook(connection.id, webhookSecret);
         if (!response.ok) {
+          const body = await response.text();
           throw new Error(
-            `Expected 200, got ${response.status}: ${await response.text()}`,
+            `Expected 200, got ${response.status}: ${body || "(empty — is pnpm dev running with REDIS_URL in apps/web/.env.local?)"}`,
           );
         }
         const json = (await response.json()) as {
